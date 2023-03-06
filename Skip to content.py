@@ -1,4 +1,18 @@
 
+class aaa():
+    def __init__(self) -> None:
+        self.varr = 0
+        pass
+    def aa(self, var):
+        var[0] = 123
+        print(var)
+
+l = [1]
+c = aaa()
+c.aa(l)
+print(l)
+exit()
+
 
 import PySimpleGUI as sg
 

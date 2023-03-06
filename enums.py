@@ -22,9 +22,15 @@ str_list = ["TOP",
 directions_list = [Direction(str_, count)for count, str_ in enumerate(str_list)]
 
 class Directions():
-    def get_contrary(self, direction):
-        #if direction:
-        return direction+1
+    pass
+
+def get_contrary(direction):
+    #if direction:
+    if direction.id % 2 == 0:
+        return  directions_list[direction.id+1]
+    else:
+        return directions_list[direction.id-1]
+         
 
 for elem in directions_list:
     setattr(Directions, elem.name, elem)

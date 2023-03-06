@@ -68,17 +68,23 @@ def find_handle_from_text(win_list, input_text, search_parent):
 def add_sub_row(text, row_counter, found=True):
     entry_c = mover_list[row_counter].entry_counter
     key=('-ROW2-',entry_c, row_counter)
-    found = "" if found else " NOT "
+    found_or_not = " found: " + str(found)  if found else " NOT found"
     row = [sg.pin(
         sg.Col([[
             sg.Button("X", border_width=0, button_color=(sg.theme_text_color(), sg.theme_background_color()), key=('-DEL2-', entry_c, row_counter)),
             sg.Input(text, expand_x=True, enable_events=True, key=('-DESC-', entry_c, row_counter)),
-            sg.Text(f'Row2 {entry_c}, {row_counter} , window {found} found', key=('-STATUS-', entry_c, row_counter))]],
+            sg.Input("", size=(1,1), enable_events=True, key=('-dir_choose-', entry_c, row_counter)),
+            sg.Text(f'Row2 {entry_c}, {row_counter} , window {found_or_not}', key=('-STATUS-', entry_c, row_counter))]],
         key=key
         ))],
     
     window.extend_layout(window[('-ROW_PANEL2-', row_counter)], row)
     mover_list[row_counter].entry_counter+=1
+    event, values = window.read(timeout=0.0001)
+    window[key].bind("<Return>", "_Enter")
+   # window[key].bind('<Control-z>', 'STRING TO APPEND')
+
+
 
 
 def create_row(row_counter, row_number_view):
@@ -100,6 +106,7 @@ def create_row(row_counter, row_number_view):
              [sg.Combo(['Refresh'], enable_events=True,expand_x=True, size=(75,1), key=("selector", row_counter)), 
                sg.Checkbox('Auto', enable_events=True, key=("AutoCB", row_counter), default=False),
                 sg.Checkbox('Parent', enable_events=True, key=("Parent", row_counter), default=True),
+                sg.Checkbox('Group', enable_events=True, key=("Group", row_counter), default=True),
 
                ],
                #[ sg.Button("Show profile")],
@@ -199,10 +206,11 @@ def init(id):
 def add_to_sub_row(handle, row, text):
     m = mover_list[row]
     if handle:
-        m.win_list.append([gw.Window(handle), ("-ROW2-", len(m.win_list), m.id), True])
-        add_sub_row(text, row, found=True)
+        win = gw.Window(handle)
+        m.win_list.append([win, ("-ROW2-", len(m.win_list), m.id), True, m.direction if m.group_windows else m.get_random_direction()])
+        add_sub_row(text, row, found=win.title)
     else:
-        m.win_list.append([None, ("-ROW2-", len(m.win_list), m.id), True])
+        m.win_list.append([None, ("-ROW2-", len(m.win_list), m.id), True, m.direction if m.group_windows else m.get_random_direction()])
         add_sub_row(text, row, found=False)
 
 
@@ -255,6 +263,7 @@ window2 = None
 while True:
 
     event, values = window.read()
+    #print(event)
     if event == sg.WIN_CLOSED or event == '-EXIT-':
         break
     
@@ -359,12 +368,19 @@ while True:
 
                 update_sug(row_counter)
             elif event[0] == "Diagonal":
+                m = mover_list[curr_row]
                 val = values[event]
                 if val:
-                    mover_list[curr_row].direction_mode = mover_list[curr_row].DIAGONAL
+                    m.direction_mode = m.DIAGONAL
                 else:        
-                    mover_list[curr_row].direction_mode = mover_list[curr_row].NON_DIAGONAL
-                mover_list[curr_row].get_random_direction()
+                    m.direction_mode = m.NON_DIAGONAL
+                    
+                if m.group_windows:
+                    m.direction = m.get_random_direction()
+                else:
+                    for win in m.win_list:
+                        win[3] = m.get_random_direction()
+                
                 # print(list_) 
             # elif event[0] == "Refresh":
             #     mover_list[event[1]].get_suggest_window_list()
@@ -376,9 +392,37 @@ while True:
                 # window[("slider_out", event[1])].update(a2)
                 # mover_list[event[1]].pixels_per_min = a2
                 update_speed(event[1])
-            elif event[1] == "-DESC-":
-                print(event)
+            elif event[0] == "-DESC-":
+                text = window[event].get()
+                if len(text) >= 3:
+                    handle = find_handle_from_text(gw.getAllWindows(), text, window[("Parent", curr_row)])
+                    if handle:
+                        win = gw.Window(handle)
+                        window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window found: ' + win.title)
+                        mover_list[curr_row].win_list[event[1]][0] = win
+                    else:
+                        window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window NOT found')
+                        mover_list[curr_row].win_list[event[1]][0] = None
+                else:
+                    window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window NOT found')
+                    mover_list[curr_row].win_list[event[1]][0] = None
 
+            elif event[0] == "Group":
+                mover_list[curr_row].group_windows = window[event].get()
+
+            elif event[0] == "-dir_choose-":
+                m = mover_list[curr_row]
+                d = None
+                if m.direction_mode == m.DIAGONAL:
+                    d = {"a":Directions.BOTTOM_LEFT, "w":Directions.TOP_LEFT, "d":Directions.TOP_RIGHT, "s":Directions.BOTTOM_RIGHT }
+                else:
+                    d = {"a":Directions.LEFT, "w":Directions.TOP, "d":Directions.RIGHT, "s":Directions.BOTTOM }
+                val = window[event].get()
+                if val in d.keys():
+                    m.win_list[event[1]][3] = d[val]
+                window[event].update("")
+
+                #values[event] = ""
 
 
 
