@@ -80,11 +80,9 @@ def add_sub_row(text, row_counter, found=True):
     
     window.extend_layout(window[('-ROW_PANEL2-', row_counter)], row)
     mover_list[row_counter].entry_counter+=1
-    event, values = window.read(timeout=0.0001)
-    window[key].bind("<Return>", "_Enter")
+    #event, values = window.read(timeout=0.0001)
+    #window[key].bind("<Return>", "_Enter")
    # window[key].bind('<Control-z>', 'STRING TO APPEND')
-
-
 
 
 def create_row(row_counter, row_number_view):
@@ -98,15 +96,22 @@ def create_row(row_counter, row_number_view):
             
             #[sg.Input('Input sec 1', key='-IN1-'), sg.Input(key='-IN11-')],
             [sg.Slider(range=(1, 3600), disable_number_display=True,  expand_x=True, enable_events=True, orientation="horizontal", key=("slider", row_counter), default_value=def_speed),
-             sg.Text(int(def_speed*(def_speed/6)*(1/500)), size=(10,1), key=("slider_out", row_counter)),
-            sg.Checkbox('Diagonal Motion', enable_events=True, default=True, key=("Diagonal", row_counter), size=(13,1))
+             sg.Text(f"{int(def_speed*(def_speed/6)*(1/500))} pixels per min", size=(10,1), key=("slider_out", row_counter)),
+             sg.Input("x", size=(2,1), enable_events=True, key=('pixel_mult', row_counter)),
+
+            sg.Checkbox('Diagonal Motion', enable_events=True, default=True, key=("Diagonal", row_counter), size=(13,1)),
 
              ],
+             [  sg.Radio('Group all', "RADIO1", enable_events=True, default=True, key=("Group All", row_counter)),
+                sg.Radio('Group overlapping', "RADIO1", enable_events=True, default=False, key=("Group overlapping", row_counter)),
+                sg.Radio('Ignore overlapping', "RADIO1", enable_events=True, default=False, key=("Ignore overlapping", row_counter)),
+                ],
 
              [sg.Combo(['Refresh'], enable_events=True,expand_x=True, size=(75,1), key=("selector", row_counter)), 
                sg.Checkbox('Auto', enable_events=True, key=("AutoCB", row_counter), default=False),
                 sg.Checkbox('Parent', enable_events=True, key=("Parent", row_counter), default=True),
-                sg.Checkbox('Group', enable_events=True, key=("Group", row_counter), default=True),
+               # sg.Checkbox('Group', enable_events=True, key=("Group", row_counter), default=True),
+
 
                ],
                #[ sg.Button("Show profile")],
@@ -187,7 +192,7 @@ def update_speed(id):
     a = values[('slider', id)]
     a2 = int(a*(a/6)*(1/500))
     if a2 == 0: a2 = 1
-    window[("slider_out", id)].update(a2)
+    window[("slider_out", id)].update(f"{a2} pixels per min ")
     mover_list[id].pixels_per_min = a2
 
 
@@ -205,20 +210,19 @@ def init(id):
 
 def add_to_sub_row(handle, row, text):
     m = mover_list[row]
-    if handle:
-        win = gw.Window(handle)
-        m.win_list.append([win, ("-ROW2-", len(m.win_list), m.id), True, m.direction if m.group_windows else m.get_random_direction()])
-        add_sub_row(text, row, found=win.title)
-    else:
-        m.win_list.append([None, ("-ROW2-", len(m.win_list), m.id), True, m.direction if m.group_windows else m.get_random_direction()])
-        add_sub_row(text, row, found=False)
+    w = win_(gw.Window(handle) if handle else None, ("-ROW2-", len(m.win_list), m.id), 
+             True, m.direction if m.group_windows else m.get_random_direction())
+    
+    m.win_list.append(w)
+    add_sub_row(text, row, found=w.win.title if handle else False)
+
 
 
 def hide_all_sub(row, keylist=None, only_hide=False):
     for c, elem in enumerate(mover_list[row].win_list):
         if elem and not elem[2]:
             window[elem[1]].update(visible=False)
-            mover_list[row].win_list[c][0] = None
+            mover_list[row].win_list[c].win = None
             print("none" if not elem[0] else elem[0].title, " ", elem[1])
     return
 
@@ -336,7 +340,7 @@ while True:
             elif event[0] == '-DEL2-':
                 window['-ROW2-', event[1], event[2]].update(visible=False)
                 #mover_list[event[1]].win_list_str.pop(event[2])
-                mover_list[event[2]].win_list[event[1]][0] = None
+                mover_list[event[2]].win_list[event[1]].win = None
                 a = 0
             elif event[0] == 'AutoCB':
                 if values[event]:
@@ -344,22 +348,19 @@ while True:
                 # window[("selector", row_counter)].update(values=mover_list[curr_row].raw_win_list_str)#, value=values['-COMBO-'])
                     #hide_all_sub()
                     cur_list = mover_list[curr_row].win_list[:]
-                    keylist = window.key_dict.copy()
+                    #keylist = window.key_dict.copy()
                     for c, win in enumerate(cur_list):
                       #  add_to_sub_row(win._hWnd if win else None, curr_row, win.title if win else "")
                         if win:
-                            if win[0] and not win[2]:
-                                add_sub_row(win[0].title, curr_row, found=True)
+                            if win.win and not win.added_manually:
+                                add_sub_row(win.win.title, curr_row, found=True)
                             #else:
                                 #add_sub_row("None", curr_row, found=False)
-
                                 #window[win[1]].update(visible=False)
-                            pass#add_sub_row("", curr_row, found=False)
+                            #add_sub_row("", curr_row, found=False)
                             #window[("-ROW2-", c, curr_row)].update(visible=False)
                            # del window.AllKeysDict[("-ROW2-", c, curr_row)]
                    # hide_all_sub(keylist=keylist, only_hide=True)
-
-
                         #if win:
                         #    add_sub_row(win.title, row_counter)
                 else:
@@ -379,7 +380,7 @@ while True:
                     m.direction = m.get_random_direction()
                 else:
                     for win in m.win_list:
-                        win[3] = m.get_random_direction()
+                        win.direction = m.get_random_direction()
                 
                 # print(list_) 
             # elif event[0] == "Refresh":
@@ -392,6 +393,11 @@ while True:
                 # window[("slider_out", event[1])].update(a2)
                 # mover_list[event[1]].pixels_per_min = a2
                 update_speed(event[1])
+            elif event[0] == "pixel_mult":
+                i = window[event].get()
+                if i.isdigit():
+                    mover_list[event[1]].pixel_multiplier =  int(i)
+
             elif event[0] == "-DESC-":
                 text = window[event].get()
                 if len(text) >= 3:
@@ -399,16 +405,22 @@ while True:
                     if handle:
                         win = gw.Window(handle)
                         window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window found: ' + win.title)
-                        mover_list[curr_row].win_list[event[1]][0] = win
+                        mover_list[curr_row].win_list[event[1]].win = win
                     else:
                         window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window NOT found')
-                        mover_list[curr_row].win_list[event[1]][0] = None
+                        mover_list[curr_row].win_list[event[1]].win = None
                 else:
                     window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window NOT found')
-                    mover_list[curr_row].win_list[event[1]][0] = None
+                    mover_list[curr_row].win_list[event[1]].win = None
 
-            elif event[0] == "Group":
-                mover_list[curr_row].group_windows = window[event].get()
+            elif event[0] == "Group All":
+                mover_list[curr_row].group_windows = True
+
+            elif event[0] == 'Group overlapping':
+                mover_list[curr_row].group_windows = False
+            
+            elif event[0] == 'Ignore overlapping':
+                mover_list[curr_row].group_windows = False
 
             elif event[0] == "-dir_choose-":
                 m = mover_list[curr_row]
@@ -419,7 +431,10 @@ while True:
                     d = {"a":Directions.LEFT, "w":Directions.TOP, "d":Directions.RIGHT, "s":Directions.BOTTOM }
                 val = window[event].get()
                 if val in d.keys():
-                    m.win_list[event[1]][3] = d[val]
+                    m.win_list[event[1]].direction = d[val]
+                elif val == "z":
+                    win32gui.MoveWindow(m.win_list[event[1]].win._hWnd, 0, 0, m.win_list[event[1]].win.width , m.win_list[event[1]].win.height, True)
+
                 window[event].update("")
 
                 #values[event] = ""

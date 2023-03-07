@@ -59,8 +59,26 @@ Directions.TOP.y = -1
 Directions.BOTTOM.x = 0
 Directions.BOTTOM.y = 1
 
-#MODES
-GROUP_TOGHETER = 0
+
+
+class win_():
+    def __init__(self, win, key, added_manually, direction) -> None:
+        self.win = win
+        self.key = key
+        self.added_manually = added_manually
+        self.direction = direction
+        self.overlapping_wins = []
+        self.last_collision = None
+        self.debounce_col = 0
+    def get_box(self):
+        return self.win
+
+class win_group(win_):
+    def __init__(self,l, rect) -> None:
+        self.win_list = l
+        self.rect = rect
+    def get_box(self):
+        return self.rect
 
 str_list = ["TOP_SIDE",
     "BOTTOM_SIDE",

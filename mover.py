@@ -9,10 +9,23 @@ import getviswin as ge
 
 from enums import *
 
-import pygame
+import pygame, numpy as np
 
 from collections import namedtuple
 Rectangle = namedtuple('Rectangle', 'xmin ymin xmax ymax')
+
+www  = gw.getActiveWindow()
+sleep(0)
+#www.moveTo(0, 0)
+#win32gui.MoveWindow(67474, 0, 0, 100, 100, True)
+
+def move_win(hwnd, x_change, y_change):
+    rect = win32gui.GetWindowRect(hwnd)
+    x = rect[0] # 
+    y = rect[1] # 
+    w = rect[2] - x
+    h = rect[3] - y
+    win32gui.MoveWindow(hwnd, x+x_change, y+y_change, w, h, True)
 
 
 def area(a, b):  # returns None if rectangles don't intersect
@@ -34,17 +47,19 @@ ret = ge.get_visible_windows() # the first elements are the ones more on top
 for elem in ret:
     print((elem["title"] +  "\n"))
 
+
+
 class mover():
     NON_DIAGONAL = 0
     DIAGONAL = 1
     def __init__(self, id, ui) -> None:
         self.whitelist  = []
-        self.mode = GROUP_TOGHETER
+       # self.mode = GROUP_TOGHETER
         self.win_list = []#[gw.Window(elem["hwnd"]) for elem in ret]
         self.scree_res = pyautogui.size()
         #sleep(1)
         self.group_windows = True
-        self.generated_group_box = self.get_group_box()
+        self.generated_group_box = self.get_group_box(self.win_list)
         self.direction_mode = self.DIAGONAL
 
         self.get_random_direction()
@@ -72,6 +87,7 @@ class mover():
         self.pixels_per_min = 1
         self.id = id
         self.ui_ref = ui
+        self.overlap_perc = 90
 
     def get_random_direction(self):
         dir = None
@@ -100,8 +116,9 @@ class mover():
             if win["title"] != "":
                 o_a = get_overlapping_area(self.active_area, winn)
                 if o_a and o_a > winn.area//2:
-                    self.win_list.append([winn, ("-ROW2-", len(self.win_list), self.id), False, 
-                                         self.direction if self.group_windows else self.get_random_direction()])
+                    w = win_(winn,  ("-ROW2-", len(self.win_list), self.id), False, 
+                                         self.direction if self.group_windows else self.get_random_direction())
+                    self.win_list.append(w)
                     #self.raw_win_list_str.append(win["title"])
                 #else:
                 #    self.win_list.append([None, ("-ROW2-", len(self.win_list), self.id)])
@@ -128,19 +145,21 @@ class mover():
     #     ds = [attr for attr in dir(Directions) if not callable(getattr(Directions, attr)) and not attr.startswith("__")]
     #     return getattr(Directions, random.choice(ds))
 
-    def move_windows(self, x, y):
-        for elem in self.win_list:
-            win = elem[0]
+    def move_windows(self, x, y, win_list):
+        l = self.win_list if self.group_windows else win_list
+        for elem in l:
+            win = elem.win
             if not win or not win32gui.IsWindow(win._hWnd): 
                 continue
             if win.width != 0:
-                win.move(x, y)
+                move_win(win._hWnd, x, y) #win.move(x, y)
 
     def start_loop(self):
         self.t = threading.Thread(target=self.main_loop, args=())
         self.t.start()
 
-    def is_box_out_of_area(self, rect):
+    def is_box_out_of_area(self, win):
+        rect = win.get_box()
         side_delta = 0
         top_delta = 0
 
@@ -163,9 +182,9 @@ class mover():
 
         if abs(side_delta) > abs(top_delta):
             if side_delta > 0:
-                self.move_windows(-1, 0)
+                self.move_windows(-1, 0, [win])
             elif side_delta < 0:
-                self.move_windows(1, 0)
+                self.move_windows(1, 0, [win])
 
             if side_delta > 0:
                 return Collisions.RIGHT_SIDE
@@ -174,9 +193,9 @@ class mover():
                 
         else:
             if top_delta > 0:
-                self.move_windows(0, -1)
+                self.move_windows(0, -1,  [win])
             elif top_delta < 0:
-                self.move_windows(0, 1)
+                self.move_windows(0, 1,  [win])
                 
             if top_delta > 0:
                 return Collisions.BOTTOM_SIDE
@@ -185,8 +204,8 @@ class mover():
             
     def find_rect_collision(self, rect1_, rect2_):
 
-        rect1 = rect1_[0]
-        rect2 = rect2_[0]
+        rect1 = rect1_.win
+        rect2 = rect2_.win
         if not get_overlapping_area(rect1, rect2):
             return [None]
 
@@ -214,9 +233,9 @@ class mover():
             print( top_or_bottom[0].name, " ", rect1.title)
 
             if top_or_bottom[0] == Collisions.TOP_SIDE:
-                rect1.move(0, 1)
+                move_win(rect1._hWnd, 0, 1)# rect1.move(0, 1)
             else:
-                rect1.move(0, -1)
+                move_win(rect1._hWnd, 0, -1) #rect1.move(0, -1)
 
             return top_or_bottom
         
@@ -224,9 +243,9 @@ class mover():
             print( left_or_right[0].name, " ", rect1.title)
             
             if left_or_right[0] == Collisions.LEFT_SIDE:
-                rect1.move(1, 0)
+                move_win(rect1._hWnd, 1, 0)#rect1.move(1, 0)
             else:
-                rect1.move(-1, 0)
+                move_win(rect1._hWnd, -1, 0)#rect1.move(-1, 0)
 
             return left_or_right
 
@@ -234,7 +253,7 @@ class mover():
     
 
 
-    def determine_direction(self, collision, cur_direction):
+    def determine_direction(self, collision, cur_direction, title):
 
         new_direction = None
         if self.direction_mode == self.NON_DIAGONAL:
@@ -279,15 +298,15 @@ class mover():
                     new_direction = Directions.BOTTOM_LEFT
         
         self.new_direction_debounce = 10
-        print("new direction: ",  new_direction.name)
+        print(title, " new direction: ",  new_direction.name)
         return new_direction
 
-    def get_group_box(self):
+    def get_group_box(self, win_list):
         topleft = coor(self.scree_res.width, self.scree_res.height)
         bottomright = coor(0, 0)
 
-        for elem in self.win_list:
-            win = elem[0]
+        for elem in win_list:
+            win = elem.win
             if win == None: continue
             try:
                 if win.topleft.x < topleft.x:
@@ -306,8 +325,8 @@ class mover():
         bottomleft = coor(topleft.x, bottomright.y)
 
         r = rect(topleft, bottomright, topright, bottomleft)
-
-        return r #{"topleft":topleft, "bottomright":bottomright, "topright":topright, "bottomleft":bottomleft}
+        g = win_group(win_list, r)
+        return g #{"topleft":topleft, "bottomright":bottomright, "topright":topright, "bottomleft":bottomleft}
 
     def custom_sleep(self, total_sleep_time):
         rem = total_sleep_time
@@ -320,9 +339,20 @@ class mover():
                 if self.break_sleep:
                     self.break_sleep = False
                     return True
-                if rem <= 0:
+                if rem <= 0 or self.stop:
                     break
         return False
+
+    def find_overlapping_windows(self, w):
+        smaller = None
+        for win in self.win_list:
+            smaller = win if win.area < w.area else w
+            a = get_overlapping_area(w, win)
+            if a >= smaller.area:
+                w.overlapping_wins.append(win)
+                
+        print(w.overlapping_wins)
+            
 
     def main_loop(self):
         self.loop_running = True
@@ -334,29 +364,71 @@ class mover():
                 continue
 
             if self.group_windows:
-                self.generated_group_box = self.get_group_box()
+                self.generated_group_box = self.get_group_box(self.win_list)
                 collision = self.is_box_out_of_area(self.generated_group_box)
                 #print(collision)
                 if self.new_direction_debounce:
                     self.new_direction_debounce -=1
                 elif collision:
-                    self.direction =  self.determine_direction(collision, self.direction)
+                    self.direction =  self.determine_direction(collision, self.direction, "group")
                     
-                self.move_windows(self.direction.x *self.pixel_multiplier, self.direction.y *self.pixel_multiplier)
+                self.move_windows(self.direction.x *self.pixel_multiplier, self.direction.y *self.pixel_multiplier, self.win_list)
             else:
+
+                for win in self.win_list:
+                    if not win.win: continue
+                    col = self.is_box_out_of_area(win)
+                    if col:
+                        win.direction = self.determine_direction(col, win.direction, win.win.title)
+                        win.last_collision = 2                
+
+                for win1 in self.win_list:
+                    for win2 in self.win_list:
+                        if win1.last_collision or win2.last_collision or not win1.win or not win2.win or win1.win._hWnd == win2.win._hWnd:
+                            continue
+                        #if len(self.win_list) >= 2 and 0:
+                        #self.find_overlapping_windows()
+
+                        col = self.find_rect_collision(win1, win2)
+                        #area = get_overlapping_area(self.win_list[1][0], self.win_list[2][0])
+
+                        if col[0]:
+                            win1.last_collision = 2
+                            win2.last_collision = 2
+                            win1.direction = self.determine_direction(col[0], win1.direction, win1.win.title)
+                            v = pygame.math.Vector2(win1.win.center.x - win2.win.center.x, win1.win.center.y - win2.win.center.y)
+                            vm = v.normalize()
+                            move_win(win1.win._hWnd, int(round(vm.x))*10, int(round(vm.y))*10)
+                            move_win(win2.win._hWnd, -int(round(vm.x))*10, -int(round(vm.y))*10)
+
+                            #if abs(col[1]) < 10:
+                            win2.direction = get_contrary(win1.direction)
+                        
+                for win in self.win_list:
+                    #win.last_collision = False
+                    if win.last_collision:
+                        win.last_collision-=1
+
+                
+
                 for win in reversed(self.win_list):
-                    if win[0] and win[0].width != 0:
-                        win[0].move(win[3].x, win[3].y)
+                    if win.win and win.win.width != 0:
+                        move_win(win.win._hWnd, win.direction.x * self.pixel_multiplier, win.direction.y* self.pixel_multiplier)  # win[0].move(win[3].x, win[3].y)
 
-                if len(self.win_list) >= 2:
-                    col = self.find_rect_collision(self.win_list[1], self.win_list[2])
-                    #area = get_overlapping_area(self.win_list[1][0], self.win_list[2][0])
+                if len(self.win_list) >= 2 and 0:
+                    a = self.win_list[0].win
+                    b = self.win_list[1].win
+                    vx = a.center.x - b.center.x
+                    vy = a.center.y - b.center.y
+                    v = pygame.math.Vector2(vx, vy)
+                    vm = v.normalize()
+                    vr = v.rotate(22.5)
+                    vv = [[vr.x, vr.y]]
+                    vvv = np.array(vv)
 
-                    if col[0]:
-                        self.win_list[1][3] = self.determine_direction(col, self.win_list[1][3])
-                        #if abs(col[1]) < 10:
-                        self.win_list[2][3] = get_contrary(self.win_list[1][3])
+                    inv = np.degrees(np.arctan2(*vvv.T[::-1])) % 360.0
 
+                    print(f"{v} {vx} {vy} {vm} {round(vm.x*4)/4} {round(vm.y*4)/4} {inv} {inv+0} {round(inv[0]+0)//45}" )
 
             # for win in self.win_list:
             #     if win.width != 0:
