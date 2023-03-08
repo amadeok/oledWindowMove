@@ -26,8 +26,19 @@ window = None
 
 
 #SEC1_KEY = '-SECTION1-'
-
+curr_file = ""
+row_counter = 0
+row_number_view = 1
+curr_row = 0
+window2 = None
 mover_list = []
+window = None
+exit_program = False
+def_file = os.getcwd() + "\\" + "def.json"
+conf_path = os.getcwd() + "\\" + "conf"
+exists = os.path.isfile( conf_path)
+settings_file = ""
+prev_pos = None
 
 def get_path_from_hwd(hwd):
     try:
@@ -79,18 +90,22 @@ def add_sub_row(text, row_counter, found=True):
         ))],
     
     window.extend_layout(window[('-ROW_PANEL2-', row_counter)], row)
+    sg.user_settings_set_entry( " ".join(str(e) for e in ('-DESC-', entry_c, row_counter)), text)
+
     mover_list[row_counter].entry_counter+=1
+    
+
     #event, values = window.read(timeout=0.0001)
     #window[key].bind("<Return>", "_Enter")
    # window[key].bind('<Control-z>', 'STRING TO APPEND')
 
 
 def create_row(row_counter, row_number_view):
-    mover_list.append(mover.mover(row_counter, window))
+   # mover_list.append(mover.mover(row_counter, window))
 
     arrows=(sg.SYMBOL_DOWN, sg.SYMBOL_UP)
     collapsed=False
-    key = '-SECTION' + str(row_counter) + '-'
+  #  key = '-SECTION' + str(row_counter) + '-'
     def_speed = 60
     layout = [
             
@@ -102,9 +117,12 @@ def create_row(row_counter, row_number_view):
             sg.Checkbox('Diagonal Motion', enable_events=True, default=True, key=("Diagonal", row_counter), size=(13,1)),
 
              ],
-             [  sg.Radio('Group all', "RADIO1", enable_events=True, default=True, key=("Group All", row_counter)),
-                sg.Radio('Group overlapping', "RADIO1", enable_events=True, default=False, key=("Group overlapping", row_counter)),
-                sg.Radio('Ignore overlapping', "RADIO1", enable_events=True, default=False, key=("Ignore overlapping", row_counter)),
+             [  sg.Radio('Group all', f"RADIO{row_counter}", enable_events=True, default=True, key=("-group_all-", row_counter)),
+                sg.Radio('Group overlapping', f"RADIO{row_counter}", enable_events=True, default=False, key=("-group_overlapping-", row_counter)),
+                sg.Radio('Ignore overlapping', f"RADIO{row_counter}", enable_events=True, default=False, key=("-ignore_overlapping-", row_counter)),
+                sg.Input(key=('-group-', row_counter), enable_events=False, visible=False),
+                sg.Input(key=('-row2_list-', row_counter), enable_events=False, visible=False),
+
                 ],
 
              [sg.Combo(['Refresh'], enable_events=True,expand_x=True, size=(75,1), key=("selector", row_counter)), 
@@ -121,6 +139,9 @@ def create_row(row_counter, row_number_view):
              sg.Button('Pick bottom right',key=("-PBR", row_counter), button_color='yellow on green'),
              sg.Button('Start',key=("start_stop", row_counter), button_color='yellow on green'),
             sg.Button('which',key=("which", row_counter), button_color='yellow on green'),
+            sg.Button("Prev", border_width=0, button_color=(sg.theme_text_color(), sg.theme_background_color()), key=('-winp-', row_counter)),
+
+           # sg.Text("Choose a file: ", enable_events=True), sg.FileBrowse(key="-IN-", change_submits=True, enable_events=True),
 
              #sg.Button('Button3 section 1', button_color='yellow on green')
              ]
@@ -148,23 +169,16 @@ def on_click_brc(x, y, button, pressed):
     mover_list[curr_row].update_active_area()
     listener.stop()
 
-def open_window():
-    layout = [[sg.Text("New Window", key="new"), sg.Button("Get Size", enable_events=True)
-               ]]
-    window = sg.Window("OledPreviewWin", layout, resizable=True, size=(mover_list[curr_row].active_area.width, mover_list[curr_row].active_area.height))
-    x = mover_list[curr_row].active_area.topleft[0]
-    y = mover_list[curr_row].active_area.topleft[1]
-   # window.move(x, y) 
-    # sleep(1)
-    # window2 = gw.getWindowsWithTitle ('OledPreviewWin')
-    # if len(window2):
-    #     window2[0].moveTo(x,y)
-
-    choice = None
+def open_window(id):
+    m = mover_list[id]
+    layout = [[sg.Text("New Window", key="new"), sg.Button("Get Size", enable_events=True)   ]]
+    window = sg.Window("OledPreviewWin", layout, resizable=True, size=(m.active_area.width, 
+                                                                       m.active_area.height))
+    x = m.active_area.topleft[0]
+    y = m.active_area.topleft[1]
     moved = False
     while True:
         event, values = window.read(timeout=0.5)
-        
         if not moved: 
             window.move(x, y) 
         moved = True
@@ -172,28 +186,26 @@ def open_window():
         if event == "Get Size":
             loc = window.current_location()
             size = window.current_size_accurate()
-  
-            #mover_list[curr_row].update_active_area()
-            mover_list[curr_row].active_area = pygame.Rect(loc[0], loc[1], size[0], size[1])
-            mover_list[curr_row].top_left_coor = mover_list[curr_row].active_area.topleft
-            mover_list[curr_row].bottom_right_coor = mover_list[curr_row].active_area.bottomright
-            update_sug(curr_row)
+            #m.update_active_area()
+            m.active_area = pygame.Rect(loc[0], loc[1], size[0], size[1])
+            m.top_left_coor = m.active_area.topleft
+            m.bottom_right_coor = m.active_area.bottomright
+            update_sug(id)
 
         if event == "Exit" or event == sg.WIN_CLOSED:
             break
         
     window.close()
 
-
-
 def update_speed(id):
     event, values = window.read(timeout=0.0001)
-
+    
     a = values[('slider', id)]
     a2 = int(a*(a/6)*(1/500))
     if a2 == 0: a2 = 1
     window[("slider_out", id)].update(f"{a2} pixels per min ")
     mover_list[id].pixels_per_min = a2
+
 
 
 def update_sug(id):
@@ -211,7 +223,7 @@ def init(id):
 def add_to_sub_row(handle, row, text):
     m = mover_list[row]
     w = win_(gw.Window(handle) if handle else None, ("-ROW2-", len(m.win_list), m.id), 
-             True, m.direction if m.group_windows else m.get_random_direction())
+             True, m.direction if m.group_windows == GROUP_ALL else m.get_random_direction())
     
     m.win_list.append(w)
     add_sub_row(text, row, found=w.win.title if handle else False)
@@ -220,10 +232,10 @@ def add_to_sub_row(handle, row, text):
 
 def hide_all_sub(row, keylist=None, only_hide=False):
     for c, elem in enumerate(mover_list[row].win_list):
-        if elem and not elem[2]:
-            window[elem[1]].update(visible=False)
+        if elem and not elem.added_manually:#elem[2]:
+            window[elem.key].update(visible=False)
             mover_list[row].win_list[c].win = None
-            print("none" if not elem[0] else elem[0].title, " ", elem[1])
+            print("none" if not elem.win else elem.win.title, " ", elem.key)
     return
 
     list_ = window.key_dict if not keylist else keylist
@@ -237,264 +249,374 @@ def hide_all_sub(row, keylist=None, only_hide=False):
                 if  mover_list[curr_row].win_list[elem[1]] == None:
                     window[elem].update(visible=False)
 
-
-layout = [  [sg.Text('Add and "Delete" Rows From a Window', font='15')],
-            [sg.Column([create_row(0, 1)], k='-ROW_PANEL-')],
-            [sg.Text("Exit", enable_events=True, key='-EXIT-', tooltip='Exit Application'),
-            sg.Text("Refresh", enable_events=True, key='-REFRESH-', tooltip='Exit Application'),
-            sg.Text('+', enable_events=True, k='-ADD_ITEM-', tooltip='Add Another Item'),
-            sg.Button("prev", border_width=0, button_color=(sg.theme_text_color(), sg.theme_background_color()), key=('-winp-')),
-            ],
-            
-]
+def add_instance(dummy):
+    global row_counter; global row_number_view
 
 
-window = sg.Window('Dynamically Adding Elements', 
-    layout,  use_default_focus=False, font='15', finalize=True)
+    if not dummy:
+        mover_list.append(mover.mover(row_counter, window))
 
-mover_list[0].ui_ref = window
-init(0)
-
-row_counter = 0
-row_number_view = 1
-curr_row = 0
-
-window2 = None
-
-
-
-
-while True:
-
-    event, values = window.read()
-    #print(event)
-    if event == sg.WIN_CLOSED or event == '-EXIT-':
-        break
-    
-    if type(event) == tuple:
-        if type(event[0]) == tuple:
-            curr_row = event[0][1]
-            if event[0][0] == "selector":
-                mov = mover_list[curr_row]
-                if event[1] == "FocusIn":
-                    print("focus in")
-                    mover_list[curr_row].get_suggest_window_list()
-                    window[("selector", curr_row)].update(values=mover_list[curr_row].suggest_win_list_str)
-                else:
-                    text = window[event[0]].get()
-
-                    handle = find_handle_from_text(gw.getAllWindows(), text, window[("Parent", curr_row)])
-                    #wins = gw.getWindowsWithTitle(text)
-                    add_to_sub_row(handle, curr_row, text)
-
-
-
-        else:
-            curr_row = event[len(event)-1]
-            if event[0] == '-DEL-':
-                row_number_view -= 1
-                mover_list[event[1]] = None
-                cur_key = '-SECTION' + str(event[1]) + '-'
-                window['-ROW-', event[1]].update(visible=False)
-
-            elif event[0] == '-BUTTON-':
-                window[('-SECTION-', event[1])].update(visible=not window[('-SECTION-', event[1])].visible)
-                pass
-               # window[SEC1_KEY].update(visible=not window[SEC1_KEY].visible)
-               # window[SEC1_KEY+'-BUTTON-'].update(window[SEC1_KEY].metadata[0] if window[SEC1_KEY].visible else window[SEC1_KEY].metadata[1])
-
-            if "PTL" in event[0]:
-                with Listener(on_click=on_click_tlc) as listener:
-                    listener.join()
-                    window[event].update(mover_list[event[1]].top_left_coor)
-                update_sug(event[1])
-
-            elif "PBR" in event[0]:
-                with Listener(on_click=on_click_brc) as listener:
-                    listener.join()
-                    window[event].update(mover_list[event[1]].bottom_right_coor)
-                update_sug(event[1])
-
-            elif "start_stop" in event[0]:
-                if mover_list[event[1]].loop_running:
-                    mover_list[event[1]].stop = True
-                else:
-                    mover_list[event[1]].start_loop()
-                sleep(0.1)
-            elif event[0 ] == "which":
-                print("\n")
-                for key in window.key_dict:
-                    if "-ROW2-" in key and window[key].visible:
-                        print(key)
-            elif "selector" in event[0]:
-                text = window[event].get()  # use the combo key
-                if text == "Refresh":
-                    values=mover_list[curr_row].get_suggest_window_list()
-                    window[event].update(values=mover_list[curr_row].suggest_win_list_str)#, value=values['-COMBO-'])
-                else:
-                    wins = gw.getWindowsWithTitle(text)
-                    if len(wins):
-                        add_to_sub_row(wins[0]._hWnd, curr_row, text)
-                    #add_sub_row(combo, event[1])
-                    #mover_list[event[1]].win_list.append(gw.getWindowsWithTitle(combo)[0])
-            elif event[0] == '-DEL2-':
-                window['-ROW2-', event[1], event[2]].update(visible=False)
-                #mover_list[event[1]].win_list_str.pop(event[2])
-                mover_list[event[2]].win_list[event[1]].win = None
-                a = 0
-            elif event[0] == 'AutoCB':
-                if values[event]:
-                    values=mover_list[curr_row].get_window_list()
-                # window[("selector", row_counter)].update(values=mover_list[curr_row].raw_win_list_str)#, value=values['-COMBO-'])
-                    #hide_all_sub()
-                    cur_list = mover_list[curr_row].win_list[:]
-                    #keylist = window.key_dict.copy()
-                    for c, win in enumerate(cur_list):
-                      #  add_to_sub_row(win._hWnd if win else None, curr_row, win.title if win else "")
-                        if win:
-                            if win.win and not win.added_manually:
-                                add_sub_row(win.win.title, curr_row, found=True)
-                            #else:
-                                #add_sub_row("None", curr_row, found=False)
-                                #window[win[1]].update(visible=False)
-                            #add_sub_row("", curr_row, found=False)
-                            #window[("-ROW2-", c, curr_row)].update(visible=False)
-                           # del window.AllKeysDict[("-ROW2-", c, curr_row)]
-                   # hide_all_sub(keylist=keylist, only_hide=True)
-                        #if win:
-                        #    add_sub_row(win.title, row_counter)
-                else:
-                    #window[("selector", row_counter)].update(values=[])#, value=values['-COMBO-'])
-                    hide_all_sub(curr_row)
-
-                update_sug(row_counter)
-            elif event[0] == "Diagonal":
-                m = mover_list[curr_row]
-                val = values[event]
-                if val:
-                    m.direction_mode = m.DIAGONAL
-                else:        
-                    m.direction_mode = m.NON_DIAGONAL
-                    
-                if m.group_windows:
-                    m.direction = m.get_random_direction()
-                else:
-                    for win in m.win_list:
-                        win.direction = m.get_random_direction()
-                
-                # print(list_) 
-            # elif event[0] == "Refresh":
-            #     mover_list[event[1]].get_suggest_window_list()
-            #     window[("selector", event[1])].update(values=mover_list[event[1]].suggest_win_list_str)#, value=values['-COMBO-'])
-            elif event[0] == "slider":
-                mover_list[event[1]].break_sleep = True
-                # a = values[('slider', event[1])]
-                # a2 = int(a*a*(1/1000))
-                # window[("slider_out", event[1])].update(a2)
-                # mover_list[event[1]].pixels_per_min = a2
-                update_speed(event[1])
-            elif event[0] == "pixel_mult":
-                i = window[event].get()
-                if i.isdigit():
-                    mover_list[event[1]].pixel_multiplier =  int(i)
-
-            elif event[0] == "-DESC-":
-                text = window[event].get()
-                if len(text) >= 3:
-                    handle = find_handle_from_text(gw.getAllWindows(), text, window[("Parent", curr_row)])
-                    if handle:
-                        win = gw.Window(handle)
-                        window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window found: ' + win.title)
-                        mover_list[curr_row].win_list[event[1]].win = win
-                    else:
-                        window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window NOT found')
-                        mover_list[curr_row].win_list[event[1]].win = None
-                else:
-                    window[('-STATUS-',event[1], event[2])].update(f'Row2 {event[1]}, {event[2]} , window NOT found')
-                    mover_list[curr_row].win_list[event[1]].win = None
-
-            elif event[0] == "Group All":
-                mover_list[curr_row].group_windows = True
-
-            elif event[0] == 'Group overlapping':
-                mover_list[curr_row].group_windows = False
-            
-            elif event[0] == 'Ignore overlapping':
-                mover_list[curr_row].group_windows = False
-
-            elif event[0] == "-dir_choose-":
-                m = mover_list[curr_row]
-                d = None
-                if m.direction_mode == m.DIAGONAL:
-                    d = {"a":Directions.BOTTOM_LEFT, "w":Directions.TOP_LEFT, "d":Directions.TOP_RIGHT, "s":Directions.BOTTOM_RIGHT }
-                else:
-                    d = {"a":Directions.LEFT, "w":Directions.TOP, "d":Directions.RIGHT, "s":Directions.BOTTOM }
-                val = window[event].get()
-                if val in d.keys():
-                    m.win_list[event[1]].direction = d[val]
-                elif val == "z":
-                    win32gui.MoveWindow(m.win_list[event[1]].win._hWnd, 0, 0, m.win_list[event[1]].win.width , m.win_list[event[1]].win.height, True)
-
-                window[event].update("")
-
-                #values[event] = ""
-
-
-
+        window.extend_layout(window['-ROW_PANEL-'], [create_row(row_counter, row_number_view)])
+        event, values = window.read(timeout=0.0001)
+        
+        init(row_counter)
     else:
-        if event.startswith("-winp"):
-            if window2 == None:
-                open_window()
-                
-        if event.startswith("-SECTION"):
-            n = event.split("|")[0]
-            if "PTL" in event:
-                pass
-            #window[n].update(visible=not window[n].visible)
-            #window[n+'|-BUTTON-'].update(window[n].metadata[0] if window[n].visible else window[n].metadata[1])
+        mover_list.append(None)
 
-        if event == '-ADD_ITEM-':
-            row_counter += 1
-            row_number_view += 1
-            print("Actual Row Number: ", row_counter)
-            print("Displayed Row Number: ", row_number_view)
-            # Allows you to add items to a layout
-            # These items cannot be deleted, but can be made invisible
-            window.extend_layout(window['-ROW_PANEL-'], [create_row(row_counter, row_number_view)])
-            event, values = window.read(timeout=0.0001)
+    row_counter += 1
+    row_number_view += 1
+    print("Actual Row Number: ", row_counter, " ", dummy)
+    print("Displayed Row Number: ", row_number_view, " " , dummy)
+
+def update_group_mode():
+    event, values = window.read(timeout=0.0001)
+
+    for i, m in enumerate(mover_list):
+        if m:
+            val = window[("-group-", i)].get()
+            if len(val):
+                window[(val, i)].update(True)
+                m.group_windows = group_dict[val]
             
-            init(row_counter)
+            diag = sg.user_settings_get_entry("Diagonal " + str(i))
+            if diag:
+                m.direction_mode = int(diag)
+            m.direction = m.get_random_direction()
 
-            # window[("selector", row_counter)].bind("<Return>", "_Enter")
-            # update_speed(row_counter)
-            # update_sug(row_counter)
+            val = sg.user_settings_get_entry("-PTL " + str(i))
+            if val:
+                mover_list[i].top_left_coor = coor(val[0], val[1])
+
+            val = sg.user_settings_get_entry("-PBR " + str(i))
+            if val:
+                mover_list[i].bottom_right_coor = coor(val[0], val[1])
+                mover_list[i].update_active_area()
+            init(i)
+
+def last_elem(l):
+    return l[len(l)-1]
 
 
-window.close()
+def find_instances_nb():
+    settings = sg.user_settings()
+    dummy_l = [True for x in range(100)]
+    max_inst_nb = 0
+
+    entry_list = [[] for x in range(100)]
+
+    for k, value in settings.items():
+        k_split = k.split(" ")
+        instance_id = int(last_elem(k_split))
+        if instance_id > max_inst_nb:
+            max_inst_nb = instance_id
+        dummy_l[instance_id] = False
+
+        if len(k_split) == 3:
+            entry_list[instance_id].append((k_split[0], value))
+
+    i = 0
+    while i <= max_inst_nb:
+        add_instance(dummy_l[i])
+        i+=1
+    
+    for i, elem in enumerate(entry_list):
+
+        parent = sg.user_settings_get_entry("Parent " + str(i))
+
+        for entry in elem:
+
+            handle = find_handle_from_text(gw.getAllWindows(), entry[1], parent)
+
+            add_to_sub_row(handle, i, entry[1])
+    
+
+def read_settings():
+
+    find_instances_nb()
+
+    settings = sg.user_settings()
+    for k, value in settings.items():
+        k_split = k.split(" ")
+        k_ = ()
+        for a in k_split:
+            k_ += ((int(a) if a.isdigit() else a),)
+        #if len(k_) == 2:
+
+        if type(value) == tuple:
+            window[k_].update(coor(value[0], value[1]))
+        else:
+            window[k_].update(value)
+
+    update_group_mode()
+
+def read_save_file(file_path):
+    cur = sg.user_settings()
+    settings = sg.user_settings_load(file_path)
+    #a = sg.user_settings_get_entry("-PTL 0")
+    s = os.path.basename(file_path)
+    window["-save_name-"].update(s)
+    read_settings()
+    print(file_path)
+
+def get_layout():
+    return   [  [sg.Text('Add and "Delete" Rows From a Window', font='15')],
+                [sg.Column([], k='-ROW_PANEL-')], #[create_row(0, 1)
+                [sg.Text("Exit", enable_events=True, key='-EXIT-', tooltip='Exit Application'),
+                sg.Text("Refresh", enable_events=True, key='-REFRESH-', tooltip='Exit Application'),
+                sg.Text('+', enable_events=True, k='-ADD_ITEM-', tooltip='Add Another Item'),
+                sg.Input(key='_FILEBROWSE_', enable_events=True, visible=False),
+                sg.Text("Choose a file: ", key='-save_name-', enable_events=True),
+                sg.FileBrowse(target='_FILEBROWSE_'),
+
+                sg.Text('Bounce', enable_events=False, k='-bounce-', tooltip='Add Another Item'),
+                sg.Input(key='bounce_input', enable_events=True, visible=False),
+
+                ],
+                ]
 
 
 
-#m = mover.mover()
-#m.main_loop()
+if not exists:
+    with open(conf_path, "w+") as f:
+        f.write(def_file)
 
-exit()
+with open(conf_path, "r") as f:
+    settings_file = f.read()
 
-sg.theme('DarkAmber')   # Add a touch of color
-# All the stuff inside your window.
-layout = [  [sg.Text('Some text on Row 1')],
-            [sg.Text('Enter something on Row 2'), sg.InputText()],
-            [sg.Button('Ok'), sg.Button('Cancel')] ]
 
-# Create the Window
-window = sg.Window('Window Title', layout)
-# Event Loop to process "events" and get the "values" of the inputs
+
 while True:
-    event, values = window.read()
-    if event == sg.WIN_CLOSED or event == 'Cancel': # if user closes window or clicks cancel
-        break
-    print('You entered ', values[0])
+    mover_list.clear()
+    row_counter = 0
+    row_number_view = 1
 
-window.close()
+    window = sg.Window('Oled Window Mover', 
+    get_layout(),  use_default_focus=False, font='15', finalize=True)
+
+    if prev_pos:
+        h = gw.getWindowsWithTitle('Oled Window Mover')[0]
+        win32gui.MoveWindow(h._hWnd, prev_pos[0], prev_pos[1], h.width, h.height, True)
+        #win32gui.LineTo(h._hWnd, 0, 1000)
+    read_save_file(settings_file)
+
+    while True:
+
+        event, values = window.read()
+        #print(event)
+
+        if event == sg.WIN_CLOSED or event == '-EXIT-':
+            exit_program = True
+            break
+        
+        if type(event) == tuple:
+            if type(event[0]) == tuple:
+                curr_row = event[0][1]
+                if event[0][0] == "selector":
+                    mov = mover_list[curr_row]
+                    if event[1] == "FocusIn":
+                        print("focus in")
+                        mover_list[curr_row].get_suggest_window_list()
+                        window[("selector", curr_row)].update(values=mover_list[curr_row].suggest_win_list_str)
+                    else:
+                        text = window[event[0]].get()
+
+                        handle = find_handle_from_text(gw.getAllWindows(), text, window[("Parent", curr_row)])
+                        #wins = gw.getWindowsWithTitle(text)
+                        add_to_sub_row(handle, curr_row, text)
+
+
+
+            else:
+                curr_row = event[len(event)-1]
+                if event[0] == '-DEL-':
+                    row_number_view -= 1
+                    mover_list[event[1]] = None
+                    window['-ROW-', event[1]].update(visible=False)
+
+                    settings = sg.user_settings()
+                    d =  settings.copy()
+                    for k, value in d.items():
+                        k_s = k.split(" ")
+                        
+                        if int(last_elem(k_s)) == curr_row:
+                            sg.user_settings_delete_entry(k)               
+
+                elif event[0] == '-BUTTON-':
+                    window[('-SECTION-', event[1])].update(visible=not window[('-SECTION-', event[1])].visible)
+                    
+                if "PTL" in event[0]:
+                    var = None
+                    with Listener(on_click=on_click_tlc) as listener:
+                        listener.join()
+                        var = mover_list[event[1]].top_left_coor
+                        window[event].update(var)
+                    update_sug(event[1])
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), (var.x, var.y))
+
+                elif "PBR" in event[0]:
+                    var = None
+                    with Listener(on_click=on_click_brc) as listener:
+                        listener.join()
+                        var = mover_list[event[1]].bottom_right_coor
+                        window[event].update(var)
+                    update_sug(event[1])
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), (var.x, var.y))
+
+                elif "start_stop" in event[0]:
+                    if mover_list[event[1]].loop_running:
+                        mover_list[event[1]].stop = True
+                    else:
+                        mover_list[event[1]].start_loop()
+                    sleep(0.1)
+
+                elif event[0 ] == "which":
+                    print("\n")
+                    for key in window.key_dict:
+                        if "-ROW2-" in key and window[key].visible:
+                            print(key)
+                # window[('-ignore_overlapping-', 0)].update(True)
+
+                elif "selector" in event[0]:
+                    text = window[event].get()  # use the combo key
+                    if text == "Refresh":
+                        values=mover_list[curr_row].get_suggest_window_list()
+                        window[event].update(values=mover_list[curr_row].suggest_win_list_str)#, value=values['-COMBO-'])
+                    else:
+                        wins = gw.getWindowsWithTitle(text)
+                        if len(wins):
+                            add_to_sub_row(wins[0]._hWnd, curr_row, text)
+
+                elif event[0] == '-DEL2-':
+                    window['-ROW2-', event[1], event[2]].update(visible=False)
+                    #mover_list[event[1]].win_list_str.pop(event[2])
+                    mover_list[event[2]].win_list[event[1]].win = None
+                    mover_list[event[2]].win_list[event[1]].marked_for_del = True
+                    sg.user_settings_delete_entry(f"-DESC- {event[1]} {event[2]}")
+                    
+                elif event[0] == 'AutoCB':
+                    if values[event]:
+                        values=mover_list[curr_row].get_window_list()
+
+                        cur_list = mover_list[curr_row].win_list[:]
+                        #keylist = window.key_dict.copy()
+                        for c, win in enumerate(cur_list):
+                            if win:
+                                if win.win and not win.added_manually:
+                                    add_sub_row(win.win.title, curr_row, found=True)
+
+                    else:
+                        hide_all_sub(curr_row)
+
+                    update_sug(curr_row)
+                elif event[0] == "Diagonal":
+                    m = mover_list[curr_row]
+                    val = values[event]
+                    if val:
+                        m.direction_mode = m.DIAGONAL
+                    else:        
+                        m.direction_mode = m.NON_DIAGONAL
+                    
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), m.direction_mode)
+
+                    if m.group_windows:
+                        m.direction = m.get_random_direction()
+                    else:
+                        for win in m.win_list:
+                            win.direction = m.get_random_direction()
+
+                elif event[0] == "slider":
+                    mover_list[event[1]].break_sleep = True
+                    update_speed(event[1])
+                    sg.user_settings_set_entry( " ".join(str(e) for e in ("slider", event[1])), values[('slider', event[1])])
+
+
+                elif event[0] == "Parent":
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), window[event].get())
+
+                elif event[0] == "pixel_mult":
+                    i = window[event].get()
+                    if i.isdigit():
+                        mover_list[event[1]].pix_mult =  int(i)
+                        sg.user_settings_set_entry( " ".join(str(e) for e in event), int(i))
+
+
+                elif event[0] == "-DESC-":
+                    m = mover_list[curr_row]
+
+                    text = window[event].get()
+                    if len(text) >= 3:
+                        handle = find_handle_from_text(gw.getAllWindows(), text, window[("Parent", curr_row)])
+
+                        win = gw.Window(handle) if handle else None
+
+                        mover.win_up(window, m, event[1], event[2], win, text)                    
+                    else:
+                        mover.win_up(window, m, event[1], event[2], None, text)                    
+
+                elif event[0] == "-group_all-":
+                    mover_list[curr_row].group_windows = GROUP_ALL
+                    sg.user_settings_set_entry(  "-group- " + str(curr_row), "-group_all-")
+
+                elif event[0] == '-group_overlapping-':
+                    mover_list[curr_row].group_windows = GROUP_OVERLAPPING
+                    sg.user_settings_set_entry(   "-group- " + str(curr_row),  '-group_overlapping-')
+                
+                elif event[0] == '-ignore_overlapping-':
+                    mover_list[curr_row].group_windows = GROUP_NONE
+                    sg.user_settings_set_entry(   "-group- " + str(curr_row), '-ignore_overlapping-')
+
+                elif event[0] == "-dir_choose-":
+                    m = mover_list[curr_row]
+                    d = None
+                    if m.direction_mode == m.DIAGONAL:
+                        d = {"a":Directions.BOTTOM_LEFT, "w":Directions.TOP_LEFT, "d":Directions.TOP_RIGHT, "s":Directions.BOTTOM_RIGHT }
+                    else:
+                        d = {"a":Directions.LEFT, "w":Directions.TOP, "d":Directions.RIGHT, "s":Directions.BOTTOM }
+                    val = window[event].get()
+                    if val in d.keys():
+                        m.win_list[event[1]].direction = d[val]
+                    elif val == "z":
+                        win32gui.MoveWindow(m.win_list[event[1]].win._hWnd, 0, 0, m.win_list[event[1]].win.width , m.win_list[event[1]].win.height, True)
+
+                    window[event].update("")
+                    
+                elif event[0] == "-winp-":
+                    if window2 == None:
+                        open_window(event[1])
+                        #values[event] = ""
+
+
+
+        else:                  
+            if event.startswith("-SECTION"):
+                n = event.split("|")[0]
+                if "PTL" in event:
+                    pass
+                #window[n].update(visible=not window[n].visible)
+                #window[n+'|-BUTTON-'].update(window[n].metadata[0] if window[n].visible else window[n].metadata[1])
+
+            elif event == '-ADD_ITEM-':
+                add_instance(False)
+
+            elif event == "_FILEBROWSE_":
+                
+                settings_file = window[event].get()
+                with open(conf_path, "w+") as f:
+                    f.write(settings_file)
+                #read_save_file(curr_file)
+                prev_pos =  window.CurrentLocation()
+                break
+
+            elif event == "bounce_input":
+                for m in mover_list:
+                    val = window[event].get()
+                    if val.isdigit():
+                        m.bounce_pixel = int(val)
+
+    window.close()
+
+    if exit_program:
+        break
 
 
 

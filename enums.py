@@ -69,16 +69,29 @@ class win_():
         self.direction = direction
         self.overlapping_wins = []
         self.last_collision = None
-        self.debounce_col = 0
+        self.marked_for_del = False
+        #self.debounce_col = 0
     def get_box(self):
         return self.win
-
-class win_group(win_):
+    def get_wins(self):
+        return [self.win]
+    
+    def __str__(self):
+        return "name:" + str(self.win.title if self.win else "None") + " hwnd:" + str(self.win._hWnd if self.win else "None")
+    def __repr__(self):
+        return "name:" + str(self.win.title if self.win else "None") + " hwnd:" + str(self.win._hWnd if self.win else "None")
+    
+class win_group():
     def __init__(self,l, rect) -> None:
         self.win_list = l
         self.rect = rect
+        #self.direction = None
+        self.last_collision = 0
+
     def get_box(self):
         return self.rect
+    def get_wins(self):
+        return self.win_list
 
 str_list = ["TOP_SIDE",
     "BOTTOM_SIDE",
@@ -106,6 +119,11 @@ class Collisions():
 for elem in collisions_list:
     setattr(Collisions, elem.name, elem)
 
+GROUP_NONE = 0
+GROUP_OVERLAPPING = 1
+GROUP_ALL = 2
+
+group_dict = {"-group_all-":2,  "-group_overlapping-":1,  "-ignore_overlapping-":0}
 
 class coor():
     def __init__(self, x, y) -> None:
