@@ -60,6 +60,11 @@ Directions.BOTTOM.x = 0
 Directions.BOTTOM.y = 1
 
 
+def find_direction(x, y):
+    for d in directions_list:
+        if d.x == x and d.y == y:
+            return d
+
 
 class win_():
     def __init__(self, win, key, added_manually, direction) -> None:
@@ -105,6 +110,12 @@ str_list = ["TOP_SIDE",
 
 collisions_list = [Direction(str_, count)for count, str_ in enumerate(str_list)]
 
+def get_opposite_side(collision):
+    if collision.id % 2 == 0:
+        return  collisions_list[collision.id+1]
+    else:
+        return collisions_list[collision.id-1]
+         
 #COLLISIONS
 class Collisions():
     pass

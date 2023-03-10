@@ -38,7 +38,7 @@ def_file = os.getcwd() + "\\" + "default.json"
 conf_path = os.getcwd() + "\\" + "conf"
 settings_file = ""
 prev_pos = None
-
+sg.theme("black")
 def get_path_from_hwd(hwd):
     try:
         if hwd != 0:

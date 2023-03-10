@@ -605,7 +605,12 @@ class mover():
 
                             #if win2.overlapping_wins[0] == win2:
                             move_win(win2.win._hWnd, -bump_x,-bump_y)
-                            win2.direction = get_contrary(win1.direction)
+                            win2_col = get_opposite_side(col[0])
+                            win2.direction = self.determine_direction(win2_col, win2.direction, win2.win.title)
+
+                            #win2.direction = get_contrary(win1.direction)
+
+
                             for w2 in win2.overlapping_wins:
                                 if w2 != win2 and w2 != win1:
                                     w2.direction = win2.direction
