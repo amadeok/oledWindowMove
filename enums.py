@@ -70,6 +70,7 @@ class win_():
         self.overlapping_wins = []
         self.last_collision = None
         self.marked_for_del = False
+        self.moving_overlapped = False
         #self.debounce_col = 0
     def get_box(self):
         return self.win

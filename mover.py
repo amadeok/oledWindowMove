@@ -5,7 +5,7 @@ import pygetwindow as gw
 from time import sleep
 from mlogging import *
 import PySimpleGUI as sg
-
+import itertools
 import getviswin as ge
 
 from enums import *
@@ -15,8 +15,6 @@ import pygame, numpy as np
 from collections import namedtuple
 Rectangle = namedtuple('Rectangle', 'xmin ymin xmax ymax')
 
-www  = gw.getActiveWindow()
-sleep(0)
 #www.moveTo(0, 0)
 #win32gui.MoveWindow(67474, 0, 0, 100, 100, True)
 
@@ -26,7 +24,10 @@ def move_win(hwnd, x_change, y_change):
     y = rect[1] # 
     w = rect[2] - x
     h = rect[3] - y
-    win32gui.MoveWindow(hwnd, x+x_change, y+y_change, w, h, True)
+    if x+x_change > abs(30*1000) or y+y_change > abs(30*1000):
+        print("trying to move window too far")
+    else:
+        win32gui.MoveWindow(hwnd, x+x_change, y+y_change, w, h, True)
 
 
 def area(a, b):  # returns None if rectangles don't intersect
@@ -38,8 +39,12 @@ def area(a, b):  # returns None if rectangles don't intersect
         return 0
     
 def get_overlapping_area(win1, win2):
-    ra = Rectangle(win1.topleft[0],  win1.topleft[1], win1.bottomright[0] , win1.bottomright[1])
-    rb = Rectangle(win2.topleft[0],  win2.topleft[1], win2.bottomright[0] , win2.bottomright[1])
+    try:
+        ra = Rectangle(win1.topleft[0],  win1.topleft[1], win1.bottomright[0] , win1.bottomright[1])
+        rb = Rectangle(win2.topleft[0],  win2.topleft[1], win2.bottomright[0] , win2.bottomright[1])
+    except Exception as e:
+        print(e)
+        return 0
     # rr1 = pygame.Rect(r1.topleft.x, r1.topleft.y, r1.width, r1.height)
     # rr2 = pygame.Rect(r2.topleft.x, r2.topleft.y, r2.width, r2.height)
     # print(rr1.colliderect(rr2))
@@ -65,6 +70,7 @@ class mover():
         self.whitelist  = []
        # self.mode = GROUP_TOGHETER
         self.win_list = []#[gw.Window(elem["hwnd"]) for elem in ret]
+        self.all_win_list = []
         self.scree_res = pyautogui.size()
         #sleep(1)
         self.group_windows = True
@@ -98,8 +104,9 @@ class mover():
         self.pixels_per_min = 1
         self.id = id
         self.ui_ref = ui
-        self.overlap_perc = 1
+        self.overlap_perc = 90
         self.bounce_pixel = 5
+        self.auto_all = False
 
     def get_random_direction(self):
         dir = None
@@ -119,24 +126,18 @@ class mover():
 
         ret = ge.get_visible_windows()
             
-        #self.win_list = []
-        #self.raw_win_list_str = []
-
         for win in ret:
-            #try:
             winn = gw.Window(win['hwnd'])
             if win["title"] != "":
                 o_a = get_overlapping_area(self.active_area, winn)
                 if o_a and o_a > winn.area//2:
                     w = win_(winn,  ("-ROW2-", len(self.win_list), self.id), False, 
-                                         self.direction if self.group_windows else self.get_random_direction())
+                                         self.direction if self.group_windows == GROUP_ALL else
+                                           self.get_random_direction())
                     self.win_list.append(w)
                     #self.raw_win_list_str.append(win["title"])
                 #else:
                 #    self.win_list.append([None, ("-ROW2-", len(self.win_list), self.id)])
-
-            #except Exception as e:
-                #print(e)
 
         return self.win_list
     
@@ -158,8 +159,8 @@ class mover():
     #     return getattr(Directions, random.choice(ds))
 
     def move_windows(self, x, y, win_list):
-        l = self.win_list if self.group_windows == GROUP_ALL else win_list
-        for elem in l:
+        
+        for elem in win_list:
             win = elem.win if type(elem) == win_ else elem
             if not win or not win32gui.IsWindow(win._hWnd): 
                 continue
@@ -356,17 +357,17 @@ class mover():
                     break
         return False
 
-    def find_overlapping_windows(self, w1):
-        print("\n #", w1.win.title if w1.win else "None")
+    def find_overlapping_windows(self, w1, win_list):
+        #print("\n #", w1.win.title if w1.win else "None")
         smaller = None; bigger = None
         w1.overlapping_wins.clear()
 
-        for w2 in self.win_list:
+        for w2 in win_list:
 
-            if not w1.win or not w2.win:
+            if not w1.win or not w2.win or not win32gui.IsWindow(w1.win._hWnd) or not win32gui.IsWindow(w2.win._hWnd):
                 continue
             if w1.win._hWnd == w2.win._hWnd:
-                w1.overlapping_wins.append((w2, 101))
+                w1.overlapping_wins.append((w2, 101)) #((w2, 101))
                 continue
             
             if w2.win.area < w1.win.area:
@@ -378,49 +379,97 @@ class mover():
             perc = (a / (smaller.win.area ) )*100
 
             if perc > self.overlap_perc:
-                w1.overlapping_wins.append((w2, perc))
+                w1.overlapping_wins.append((w2, perc)) #((w2, perc))
 
         w1.overlapping_wins.sort(key=lambda x: x[0].win.area, reverse=True)
         
-
-        
-        for ww in w1.overlapping_wins:
-            print("--- ",  ww[0].win.area, " ", ww[1], " ", ww, )
+       # for ww in w1.overlapping_wins:
+       #     print("--- ",  ww[0].win.area, " ", ww[1], " ", ww, )
             
-    def get_ove_groups(self):
-        main_list = []
-        # for w in self.win_list:
-        #     tmp_l = []
-        #     for ww in w.overlapping_wins:
-        #         tmp_l.append(ww[0])
+    def get_ove_groups(self, win_list):
+        #main_list = []
 
-        #     # for ll in main_list:
-        #     #     for tl in tmp_l:
-        #     #         if tl in ll:
 
-            
-        #     if w == tmp_l[0]:
-        #         main_list.append(tmp_l[:])
-        #     else:
-        #         a = 0 
         def contains_list(l1, l2):
-            for elem in list1:
-                if elem in list2:
-                    return True
-        main_list2 = []
-        for i1, list1 in enumerate(self.win_list.overlapping_wins[0]):
-            for i2, list2 in enumerate(self.win_list.overlapping_wins[0]):
-                if i1 != i2:
-                    if contains_list(list1, list2):
-                        main_list.append(list1 + list2)
+            for elem1 in l1:
+                for elem2 in l2:
+                    if elem1.win == elem2.win:
+                        return True
+                    
+        def remove_dup(l0):
+            new_list = []
+           # cur_ = l0[0]
+            for elem1 in l0:
+                already_in_list = False
+               # if len(new_list):
+                for elem2 in new_list:
+                  #  cur_ = elem2
+                    if elem1.win._hWnd == elem2.win._hWnd:
+                        already_in_list = True
+                        break
 
-        #l = [elem.overlapping_wins for elem in self.win_list]
-        #l1 = [elem[0] for elem in l]
-        #l2 =  list(set(l))
-        #l3 = [elem[0] for elem in l2]
-        self.group_list = [self.get_group_box(elem) for elem in main_list]
-        #for g in self.group_list:
-        #    g.direction = g.win_list[0].direction if len(g.win_list) else self.get_random_direction()
+                if not already_in_list:
+                    #print(elem1.win._hWnd, " ", cur_.win._hWnd)
+                    new_list.append(elem1)
+
+            return new_list
+
+
+        def get_ov_list(win, main_list):
+            #l = []
+            if win.overlapping_wins:
+                for elem in win.overlapping_wins:
+                    if elem[0] not in main_list:
+                        main_list += [e[0] for e in elem[0].overlapping_wins]
+                        ret = get_ov_list(elem[0], main_list)
+                        if ret and len(ret):
+                            main_list += ret 
+            #return l
+        l = []
+        for i, w1 in enumerate(win_list):
+            l.append([])
+            get_ov_list(w1, l[i])
+
+
+        for i, w1 in enumerate(win_list):
+            w1.overlapping_wins = remove_dup(l[i])
+            w1.overlapping_wins.sort(key=lambda x: x.win.area, reverse=True)
+
+
+        for i1, w1 in enumerate(win_list):
+            for i2, w2 in enumerate(win_list):
+                if i1 != i2:
+                    if contains_list(w1.overlapping_wins, w2.overlapping_wins):
+                        if len(w1.overlapping_wins) > len(w2.overlapping_wins):
+                            w2.overlapping_wins = w1.overlapping_wins.copy()
+
+        # for i, w1 in enumerate(win_list):
+        #     print ("--- ", i)
+        #     for win in w1.overlapping_wins:
+        #         print("------ ",  win.win.area, " ", win, " ")# win, )
+       
+        return
+
+        main_list2 = []
+        for i1, w1 in enumerate(win_list):
+            for i2, w2 in enumerate(win_list):
+            # for i1, list1 in enumerate(w.overlapping_wins):
+            #     for i2, list2 in enumerate(w.overlapping_wins):
+                    if i1 != i2:
+                        if contains_list(w1.overlapping_wins, w2.overlapping_wins):
+                            main_list.append(w1.overlapping_wins + w2.overlapping_wins)
+
+        for l in main_list:
+            for i in range(len(l)):
+                l[i] = l[i][0]
+                
+        for i in range(len(main_list)):
+            main_list[i] = list(dict.fromkeys(main_list[i]))
+            main_list[i].sort(key=lambda x: x.win.area, reverse=True)
+
+
+        main_list = list(main_list for main_list,_ in itertools.groupby(main_list))
+
     @staticmethod
     def win_minimized(h):
         if h.isMinimized:
@@ -429,6 +478,31 @@ class mover():
             return True
         return False
 
+    def get_auto_all_win_list(self):
+        #self.all_win_list.clear()
+
+        def find_hwnd(new_win, l):
+            for i, w in enumerate(l):
+                if w.win:
+                    if w.win._hWnd == new_win._hWnd:
+                        return i
+            return -1
+        l = [ gw.Window(elem["hwnd"]) for elem in ge.get_visible_windows()] #gw.getAllWindows()
+        for win in l:
+            if win.title != "":
+                o_a = get_overlapping_area(self.active_area, win)
+                if o_a and o_a > win.area//2 and win.width < self.scree_res.width and win.height < self.scree_res.height:
+                    found_index = find_hwnd(win, self.all_win_list)
+                    if found_index == -1:
+                        try:
+                            move_win(win._hWnd, 0, 0)
+                            self.all_win_list.append(win_(win, None, None, self.get_random_direction()))
+                        except:
+                            pass
+                    #else:
+                        #self.all_win_list[found_index]
+        return self.all_win_list
+        
     def main_loop(self):
         self.loop_running = True
         print("Starting main loop id ", self.id)
@@ -438,9 +512,11 @@ class mover():
             per_sec = self.pixels_per_min / 60
             if (self.custom_sleep(1/per_sec)):
                 continue
+            
+            win_list = self.get_auto_all_win_list() if self.auto_all else self.win_list
 
             if self.group_windows == GROUP_ALL:
-                self.generated_group_box = self.get_group_box(self.win_list)
+                self.generated_group_box = self.get_group_box(win_list)
                 collision = self.is_box_out_of_area(self.generated_group_box)
                 #print(collision)
                 if self.new_direction_debounce:
@@ -448,69 +524,108 @@ class mover():
                 elif collision:
                     self.direction =  self.determine_direction(collision, self.direction, "group")
                     
-                self.move_windows(self.direction.x *self.pix_mult, self.direction.y *self.pix_mult, self.win_list)
+                self.move_windows(self.direction.x *self.pix_mult, self.direction.y *self.pix_mult, win_list)
                 
-            elif self.group_windows == GROUP_OVERLAPPING:
+            elif self.group_windows == GROUP_OVERLAPPING or self.group_windows == GROUP_NONE:
+                
+                if self.group_windows == GROUP_OVERLAPPING:
+                    for w in win_list:
+                        self.find_overlapping_windows(w, win_list)
 
-                for i, win in enumerate(self.win_list):
+                    self.get_ove_groups(win_list)
 
-                    if win.win and not win32gui.IsWindow(win.win._hWnd) or win.marked_for_del: 
-                        win.win = None
-                        win_up(self.ui_ref, self,  i, self.id, win.win,  "None")
-                        win.marked_for_del = False
+                #for win in win_list:
+                #    win.win.moving_overlapped = False
 
-                    if not win.win or self.win_minimized(win.win) :
+                for i, win_b in enumerate(win_list):
+                    if win_b.last_collision:
+                        continue
+                    if win_b.win and not win32gui.IsWindow(win_b.win._hWnd) or win_b.marked_for_del: 
+                        win_b.win = None
+                        if not self.auto_all:
+                            win_up(self.ui_ref, self,  i, self.id, win_b.win,  "None")
+                        win_b.marked_for_del = False
+
+                    if not win_b.win or self.win_minimized(win_b.win) :
                         continue
 
-                    col = self.is_box_out_of_area(win)
-                    if col:
-                        win.direction = self.determine_direction(col, win.direction, win.win.title)
-                        win.last_collision = 2
-                        if self.group_windows == GROUP_OVERLAPPING:
-                            pass                 
+                    if self.group_windows == GROUP_OVERLAPPING:
+                        if win_b.overlapping_wins[0] != win_b:
+                            #win.direction = win.win.overlapping_wins[0].direction
+                            pass        
+                            #continue                     
 
-                for win1 in self.win_list:
-                    for win2 in self.win_list:
+                    col = self.is_box_out_of_area(win_b)
+                    if col:
+                        #for w in win.win.overlapping_wins:
+                        win_b.direction = self.determine_direction(col, win_b.direction, win_b.win.title)
+                        win_b.last_collision = 2
+                        for w in win_b.overlapping_wins:
+                            w.direction = win_b.direction
+                            w.last_collision = 2
+       
+
+                for win1 in win_list:
+                    for win2 in win_list:
                         if win1.last_collision or win2.last_collision or not win1.win or not win2.win:
                             continue
                         elif win1.win._hWnd == win2.win._hWnd or self.win_minimized(win1.win) or self.win_minimized(win2.win):
                             continue
-                        #if len(self.win_list) >= 2 and 0:
-                        #self.find_overlapping_windows()
+                        if self.group_windows == GROUP_OVERLAPPING:
+                            if win1.overlapping_wins[0] != win1:
+                                if len(win1.overlapping_wins) > 1:
+                                    win1.direction = win1.overlapping_wins[0].direction
+                                continue
+                            if win2 in win1.overlapping_wins or win2.overlapping_wins[0] != win2:
+                                continue
 
                         col = self.find_rect_collision(win1, win2)
-                        #area = get_overlapping_area(self.win_list[1][0], self.win_list[2][0])
 
                         if col[0]:
                             win1.last_collision = 2
                             win2.last_collision = 2
+                            
                             win1.direction = self.determine_direction(col[0], win1.direction, win1.win.title)
+                            
                             v = pygame.math.Vector2(win1.win.center.x - win2.win.center.x, win1.win.center.y - win2.win.center.y)
                             
                             vm = v.normalize() if v.x != 0 and v.y != 0 else v
-                            move_win(win1.win._hWnd, int(round(vm.x))*self.bounce_pixel*self.pix_mult,
-                                      int(round(vm.y))*self.bounce_pixel*self.pix_mult)
-                            move_win(win2.win._hWnd, -int(round(vm.x))*self.bounce_pixel*self.pix_mult,
-                                      -int(round(vm.y))*self.bounce_pixel*self.pix_mult)
+                            bump_x = int(round(vm.x))*self.bounce_pixel
+                            bump_y =  int(round(vm.y))*self.bounce_pixel
+                            move_win(win1.win._hWnd, bump_x, bump_y)
+       
 
-                            #if abs(col[1]) < 10:
+                            if self.group_windows == GROUP_OVERLAPPING:
+                                for w in win1.overlapping_wins:
+                                    if w != win1:
+                                        w.direction = win1.direction
+                                        move_win(w.win._hWnd, bump_x, bump_y)
+                                        w.last_collision = 2
+
+
+                            #if win2.overlapping_wins[0] == win2:
+                            move_win(win2.win._hWnd, -bump_x,-bump_y)
                             win2.direction = get_contrary(win1.direction)
+                            for w2 in win2.overlapping_wins:
+                                if w2 != win2 and w2 != win1:
+                                    w2.direction = win2.direction
+                                    move_win(w2.win._hWnd, -bump_x, -bump_y)
+                                    w2.last_collision = 2
                         
-                for win in self.win_list:
+                for win_ in win_list:
                     #win.last_collision = False
-                    if win.last_collision:
-                        win.last_collision-=1
+                    if win_.last_collision:
+                        win_.last_collision-=1
 
                 
+                for win__ in reversed(win_list):
+                    if  win__.win and win32gui.IsWindow(win__.win._hWnd) and win__.win.width != 0:
+                        move_win(win__.win._hWnd, win__.direction.x * self.pix_mult, win__.direction.y* self.pix_mult)  # win[0].move(win[3].x, win[3].y)
 
-                for win in reversed(self.win_list):
-                    if win.win and win.win.width != 0:
-                        move_win(win.win._hWnd, win.direction.x * self.pix_mult, win.direction.y* self.pix_mult)  # win[0].move(win[3].x, win[3].y)
 
-
-            elif self.group_windows == GROUP_OVERLAPPING:
+            elif self.group_windows == GROUP_NONE:
                 print("\n :")
-                for w in self.win_list:
+                for w in win_list:
                     self.find_overlapping_windows(w)
 
                 self.get_ove_groups()
@@ -528,14 +643,6 @@ class mover():
                     self.move_windows(group.win_list[0].direction.x *self.pix_mult, group.win_list[0].direction.y *self.pix_mult, group.win_list)
 
                 
-
-            # for win in self.win_list:
-            #     if win.width != 0:
-            #         win.move(self.x_move, self.y_move)
-            # total_sleep_time = self.pixels_per_min / 60
-
-
-            #print("hello")
             if self.stop:
                 print("Stopping id ", self.id)
                 self.stop = False

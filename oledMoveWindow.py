@@ -34,9 +34,8 @@ window2 = None
 mover_list = []
 window = None
 exit_program = False
-def_file = os.getcwd() + "\\" + "def.json"
+def_file = os.getcwd() + "\\" + "default.json"
 conf_path = os.getcwd() + "\\" + "conf"
-exists = os.path.isfile( conf_path)
 settings_file = ""
 prev_pos = None
 
@@ -99,19 +98,21 @@ def add_sub_row(text, row_counter, found=True):
     #window[key].bind("<Return>", "_Enter")
    # window[key].bind('<Control-z>', 'STRING TO APPEND')
 
+def convert_speed(x):
+    return  ((x**3)/12 * 0.000001)
+    #def_speed*(def_speed/6)*(1/500)
 
 def create_row(row_counter, row_number_view):
    # mover_list.append(mover.mover(row_counter, window))
 
     arrows=(sg.SYMBOL_DOWN, sg.SYMBOL_UP)
     collapsed=False
-  #  key = '-SECTION' + str(row_counter) + '-'
     def_speed = 60
     layout = [
             
             #[sg.Input('Input sec 1', key='-IN1-'), sg.Input(key='-IN11-')],
-            [sg.Slider(range=(1, 3600), disable_number_display=True,  expand_x=True, enable_events=True, orientation="horizontal", key=("slider", row_counter), default_value=def_speed),
-             sg.Text(f"{int(def_speed*(def_speed/6)*(1/500))} pixels per min", size=(10,1), key=("slider_out", row_counter)),
+            [sg.Slider(range=(1, 4800), disable_number_display=True,  expand_x=True, enable_events=True, orientation="horizontal", key=("slider", row_counter), default_value=def_speed),
+             sg.Text(f"{int(convert_speed(def_speed))} pixels per min", size=(12,1), key=("slider_out", row_counter)),
              sg.Input("x", size=(2,1), enable_events=True, key=('pixel_mult', row_counter)),
 
             sg.Checkbox('Diagonal Motion', enable_events=True, default=True, key=("Diagonal", row_counter), size=(13,1)),
@@ -126,8 +127,11 @@ def create_row(row_counter, row_number_view):
                 ],
 
              [sg.Combo(['Refresh'], enable_events=True,expand_x=True, size=(75,1), key=("selector", row_counter)), 
-               sg.Checkbox('Auto', enable_events=True, key=("AutoCB", row_counter), default=False),
                 sg.Checkbox('Parent', enable_events=True, key=("Parent", row_counter), default=True),
+                sg.Checkbox('Auto', enable_events=True, key=("AutoCB", row_counter), default=False),
+
+                sg.Checkbox('Auto All', enable_events=True, key=("auto_all", row_counter), default=False),
+
                # sg.Checkbox('Group', enable_events=True, key=("Group", row_counter), default=True),
 
 
@@ -201,7 +205,7 @@ def update_speed(id):
     event, values = window.read(timeout=0.0001)
     
     a = values[('slider', id)]
-    a2 = int(a*(a/6)*(1/500))
+    a2 = int(convert_speed(a)) # int(a*(a/6)*(1/500))
     if a2 == 0: a2 = 1
     window[("slider_out", id)].update(f"{a2} pixels per min ")
     mover_list[id].pixels_per_min = a2
@@ -216,12 +220,29 @@ def init(id):
     window[("selector", id)].bind("<Return>", "_Enter")
     window[("selector", id)].bind("<FocusIn>", "FocusIn")
 
+    for m in mover_list:
+        if m:
+            val = window["bounce_input"].get()
+            if val.isdigit():
+                m.bounce_pixel = int(val)
+            #window["bounce_input"].update(val)
+
+            val = window["ov_perc"].get()
+            if val.isdigit():
+                m.overlap_perc = int(val)
+            
+
+
     update_speed(id)
     update_sug(id)
 
 
 def add_to_sub_row(handle, row, text):
     m = mover_list[row]
+    try:
+        mover.move_win(handle, 0, 0)
+    except:
+        handle = None
     w = win_(gw.Window(handle) if handle else None, ("-ROW2-", len(m.win_list), m.id), 
              True, m.direction if m.group_windows == GROUP_ALL else m.get_random_direction())
     
@@ -268,6 +289,15 @@ def add_instance(dummy):
     print("Actual Row Number: ", row_counter, " ", dummy)
     print("Displayed Row Number: ", row_number_view, " " , dummy)
 
+def update_auto_all(id, disable):
+    mover_list[id].auto_all = disable
+    for k in window.key_dict:
+        if  last_elem(k) == id:
+            if k[0] == "-DESC-" or  k[0] == "selector" or k[0] == "AutoCB":
+                window[k].update(disabled=disable)
+
+
+
 def update_group_mode():
     event, values = window.read(timeout=0.0001)
 
@@ -279,18 +309,25 @@ def update_group_mode():
                 m.group_windows = group_dict[val]
             
             diag = sg.user_settings_get_entry("Diagonal " + str(i))
-            if diag:
+            if diag != None:
                 m.direction_mode = int(diag)
             m.direction = m.get_random_direction()
 
             val = sg.user_settings_get_entry("-PTL " + str(i))
             if val:
-                mover_list[i].top_left_coor = coor(val[0], val[1])
+                m.top_left_coor = coor(val[0], val[1])
 
             val = sg.user_settings_get_entry("-PBR " + str(i))
             if val:
-                mover_list[i].bottom_right_coor = coor(val[0], val[1])
-                mover_list[i].update_active_area()
+                m.bottom_right_coor = coor(val[0], val[1])
+                m.update_active_area()
+
+            val = sg.user_settings_get_entry('auto_all ' + str(i))
+            if val != None:
+                m.auto_all = val
+            
+            update_auto_all(i, val if val else False)            
+
             init(i)
 
 def last_elem(l):
@@ -306,22 +343,29 @@ def find_instances_nb():
 
     for k, value in settings.items():
         k_split = k.split(" ")
-        instance_id = int(last_elem(k_split))
-        if instance_id > max_inst_nb:
-            max_inst_nb = instance_id
-        dummy_l[instance_id] = False
+        if len(k_split) > 1:
+            instance_id = int(last_elem(k_split))
+            if instance_id > max_inst_nb:
+                max_inst_nb = instance_id
+            dummy_l[instance_id] = False
 
-        if len(k_split) == 3:
-            entry_list[instance_id].append((k_split[0], value))
+            if len(k_split) == 3:
+                entry_list[instance_id].append((k_split[0], value))
+        
 
     i = 0
     while i <= max_inst_nb:
         add_instance(dummy_l[i])
         i+=1
-    
+
     for i, elem in enumerate(entry_list):
+        if i >= len(mover_list):
+            break
 
         parent = sg.user_settings_get_entry("Parent " + str(i))
+        if mover_list[i]:
+            mover_list[i].direction_mode = sg.user_settings_get_entry("Diagonal " + str(i))
+            mover_list[i].group_windows = sg.user_settings_get_entry("-group- " + str(i))
 
         for entry in elem:
 
@@ -333,13 +377,16 @@ def find_instances_nb():
 def read_settings():
 
     find_instances_nb()
-
+    k = None
     settings = sg.user_settings()
     for k, value in settings.items():
         k_split = k.split(" ")
-        k_ = ()
-        for a in k_split:
-            k_ += ((int(a) if a.isdigit() else a),)
+        if len(k_split) > 1:
+            k_ = ()
+            for a in k_split:
+                k_ += ((int(a) if a.isdigit() else a),)
+        else:
+            k_ = k
         #if len(k_) == 2:
 
         if type(value) == tuple:
@@ -351,38 +398,67 @@ def read_settings():
 
 def read_save_file(file_path):
     cur = sg.user_settings()
+    if file_path == "":
+        file_path = def_file
+    if not os.path.isfile(file_path):
+        with open(file_path, "w+") as f:
+            f.write('{"-group- 1": "-group_overlapping-", "bounce_input": "5", "ov_perc": "50", "pixel_mult 1": 1}')
+            
+    # if not os.path.isfile(settings_file):
+    #     with open(settings_file, "w+") as f:
+    #         f.write('{"-group- 1": "-group_overlapping-", "bounce_input": "5", "ov_perc": "50", "pixel_mult 1": 1}')
+
     settings = sg.user_settings_load(file_path)
     #a = sg.user_settings_get_entry("-PTL 0")
     s = os.path.basename(file_path)
     window["-save_name-"].update(s)
     read_settings()
-    print(file_path)
+
+    bounce_input = window["bounce_input"].get()
+    ov_perc = window["ov_perc"].get()
+
+    for m in mover_list:
+        if m:
+            if bounce_input.isdigit():
+                m.bounce_pixel = int(bounce_input)
+            if ov_perc.isdigit():
+                m.overlap_perc = int(ov_perc)
+    
 
 def get_layout():
     return   [  [sg.Text('Add and "Delete" Rows From a Window', font='15')],
                 [sg.Column([], k='-ROW_PANEL-')], #[create_row(0, 1)
-                [sg.Text("Exit", enable_events=True, key='-EXIT-', tooltip='Exit Application'),
-                sg.Text("Refresh", enable_events=True, key='-REFRESH-', tooltip='Exit Application'),
-                sg.Text('+', enable_events=True, k='-ADD_ITEM-', tooltip='Add Another Item'),
+                [sg.Button("Exit", enable_events=True, key='-EXIT-', tooltip='Exit Application'),
+                #sg.Text("Refresh", enable_events=True, key='-REFRESH-', tooltip='Exit Application'),
+                sg.Button('New instance', enable_events=True, k='-ADD_ITEM-', tooltip='Add Another Item'),
                 sg.Input(key='_FILEBROWSE_', enable_events=True, visible=False),
                 sg.Text("Choose a file: ", key='-save_name-', enable_events=True),
-                sg.FileBrowse(target='_FILEBROWSE_'),
+                sg.FileBrowse("Load settings", target='_FILEBROWSE_'),
+                sg.Input(key='save_settings', enable_events=True, visible=False),
+                sg.FileSaveAs("New settings", target='save_settings', 
+                              enable_events=True,file_types=(('JSON', '.json'),),),
+                sg.Text('Bounce:', enable_events=False, k='-bounce-'),
+                sg.Input(key='bounce_input', size=(2,1),  enable_events=True, visible=True),
+                sg.Text('Overlap %:', enable_events=False, k='-bounce-'),
+                sg.Input(key='ov_perc', size=(2,1), enable_events=True, visible=True),
 
-                sg.Text('Bounce', enable_events=False, k='-bounce-', tooltip='Add Another Item'),
-                sg.Input(key='bounce_input', enable_events=True, visible=False),
 
                 ],
                 ]
 
+exists = os.path.isfile( conf_path)
 
+if exists:
+    with open(conf_path, "r") as f:
+        settings_file = f.read()
+        if not os.path.isfile(settings_file):
+            settings_file = def_file
+        
 
-if not exists:
+else:
     with open(conf_path, "w+") as f:
         f.write(def_file)
-
-with open(conf_path, "r") as f:
-    settings_file = f.read()
-
+        settings_file = def_file
 
 
 while True:
@@ -438,8 +514,11 @@ while True:
                     for k, value in d.items():
                         k_s = k.split(" ")
                         
-                        if int(last_elem(k_s)) == curr_row:
-                            sg.user_settings_delete_entry(k)               
+                        if len(k_s) > 1:
+                            if int(last_elem(k_s)) == curr_row:
+                                sg.user_settings_delete_entry(k)               
+                        else:
+                            sg.user_settings_delete_entry(k)  
 
                 elif event[0] == '-BUTTON-':
                     window[('-SECTION-', event[1])].update(visible=not window[('-SECTION-', event[1])].visible)
@@ -508,6 +587,12 @@ while True:
                         hide_all_sub(curr_row)
 
                     update_sug(curr_row)
+
+                elif event[0] == 'auto_all':
+                    val = window[event].get()
+                    update_auto_all(event[1], val)
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), val)
+
                 elif event[0] == "Diagonal":
                     m = mover_list[curr_row]
                     val = values[event]
@@ -518,11 +603,16 @@ while True:
                     
                     sg.user_settings_set_entry( " ".join(str(e) for e in event), m.direction_mode)
 
-                    if m.group_windows:
+                    if m.group_windows == GROUP_ALL:
                         m.direction = m.get_random_direction()
                     else:
-                        for win in m.win_list:
-                            win.direction = m.get_random_direction()
+                        win_list = m.all_win_list if m.auto_all else m.win_list
+                        for win in win_list:
+                            if m.group_windows == GROUP_OVERLAPPING:
+                                if len(win.overlapping_wins) and win == win.overlapping_wins[0]:
+                                    win.direction = m.get_random_direction()
+                            else:
+                                win.direction = m.get_random_direction()
 
                 elif event[0] == "slider":
                     mover_list[event[1]].break_sleep = True
@@ -546,7 +636,10 @@ while True:
                     text = window[event].get()
                     if len(text) >= 3:
                         handle = find_handle_from_text(gw.getAllWindows(), text, window[("Parent", curr_row)])
-
+                        try:
+                            mover.move_win(handle, 0, 0)
+                        except:
+                            handle = None
                         win = gw.Window(handle) if handle else None
 
                         mover.win_up(window, m, event[1], event[2], win, text)                    
@@ -564,6 +657,9 @@ while True:
                 elif event[0] == '-ignore_overlapping-':
                     mover_list[curr_row].group_windows = GROUP_NONE
                     sg.user_settings_set_entry(   "-group- " + str(curr_row), '-ignore_overlapping-')
+                    for w in mover_list[curr_row].win_list:
+                        w.overlapping_wins = [w]
+                    
 
                 elif event[0] == "-dir_choose-":
                     m = mover_list[curr_row]
@@ -601,6 +697,21 @@ while True:
             elif event == "_FILEBROWSE_":
                 
                 settings_file = window[event].get()
+                if os.path.isfile(settings_file):
+                    with open(conf_path, "w+") as f:
+                        f.write(settings_file)
+                    #read_save_file(curr_file)
+                    prev_pos =  window.CurrentLocation()
+                    break
+                else:
+                    print("file " , settings_file, " doesn't exist")
+
+            elif event == "save_settings":
+
+                settings_file = window[event].get()
+                sg.user_settings_filename(settings_file)
+ 
+
                 with open(conf_path, "w+") as f:
                     f.write(settings_file)
                 #read_save_file(curr_file)
@@ -609,12 +720,26 @@ while True:
 
             elif event == "bounce_input":
                 for m in mover_list:
-                    val = window[event].get()
-                    if val.isdigit():
-                        m.bounce_pixel = int(val)
+                    if m:
+                        val = window[event].get()
+                        if val.isdigit():
+                            m.bounce_pixel = int(val)
+                            sg.user_settings_set_entry(event, val)
+                        
+            elif event == "ov_perc":
+                for m in mover_list:
+                    if m:
+                        val = window[event].get()
+                        if val.isdigit():
+                            m.overlap_perc = int(val)
+                            sg.user_settings_set_entry(event, val)
+
 
     window.close()
-
+    for m  in mover_list:
+        if m:
+            m.stop = True
+            
     if exit_program:
         break
 
