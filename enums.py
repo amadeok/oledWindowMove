@@ -76,6 +76,8 @@ class win_():
         self.last_collision = None
         self.marked_for_del = False
         self.moving_overlapped = False
+        self.child_windows = []
+        self.last_position = None
         #self.debounce_col = 0
     def get_box(self):
         return self.win

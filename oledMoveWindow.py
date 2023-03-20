@@ -14,17 +14,19 @@ from logging import *
 import pygame
 from pynput.mouse import Listener
 
-all = gw.getAllWindows()
-all_ = [[t.title] for t in all]
-# for count, elem in enumerate(all):
-#     all_[count].append(elem.visible)
-# print()
+
+        #print(l[x][y])
+# while 1:
+#     print("\n\n\n")
+#     all = [[elem._hWnd, elem.title, elem.topleft] for elem in gw.getAllWindows()]
+#     for elem in all:
+#         if elem[1] != "" and abs(elem[2].x) < 30*1000 and elem[2].x != 0:
+#             print(str(elem[0]).ljust(15) +" " + elem[1].ljust(80) + " " +  str(elem[2]) )
+#     sleep(0.1)
+
 window = None
 
-
 #print(win_list)
-
-
 #SEC1_KEY = '-SECTION1-'
 curr_file = ""
 row_counter = 0
@@ -38,6 +40,10 @@ def_file = os.getcwd() + "\\" + "default.json"
 conf_path = os.getcwd() + "\\" + "conf"
 settings_file = ""
 prev_pos = None
+
+screen_res = pyautogui.size()
+prev_dir_list =  [[None for x in range(screen_res.height) ] for x in range(screen_res.width )]
+
 sg.theme("black")
 def get_path_from_hwd(hwd):
     try:
@@ -78,7 +84,7 @@ def find_handle_from_text(win_list, input_text, search_parent):
 def add_sub_row(text, row_counter, found=True):
     entry_c = mover_list[row_counter].entry_counter
     key=('-ROW2-',entry_c, row_counter)
-    found_or_not = " found: " + str(found)  if found else " NOT found"
+    found_or_not = " fou4nd: " + str(found)  if found else " NOT found"
     row = [sg.pin(
         sg.Col([[
             sg.Button("X", border_width=0, button_color=(sg.theme_text_color(), sg.theme_background_color()), key=('-DEL2-', entry_c, row_counter)),
@@ -131,6 +137,7 @@ def create_row(row_counter, row_number_view):
                 sg.Checkbox('Auto', enable_events=True, key=("AutoCB", row_counter), default=False),
 
                 sg.Checkbox('Auto All', enable_events=True, key=("auto_all", row_counter), default=False),
+                sg.Checkbox('Childs', enable_events=True, key=("childs", row_counter), default=False),
 
                # sg.Checkbox('Group', enable_events=True, key=("Group", row_counter), default=True),
 
@@ -243,8 +250,9 @@ def add_to_sub_row(handle, row, text):
         mover.move_win(handle, 0, 0)
     except:
         handle = None
-    w = win_(gw.Window(handle) if handle else None, ("-ROW2-", len(m.win_list), m.id), 
-             True, m.direction if m.group_windows == GROUP_ALL else m.get_random_direction())
+    ww = gw.Window(handle) if handle else None
+    w = win_(ww , ("-ROW2-", len(m.win_list), m.id), 
+             True, m.direction if m.group_windows == GROUP_ALL else m.get_direction(ww))
     
     m.win_list.append(w)
     add_sub_row(text, row, found=w.win.title if handle else False)
@@ -275,7 +283,7 @@ def add_instance(dummy):
 
 
     if not dummy:
-        mover_list.append(mover.mover(row_counter, window))
+        mover_list.append(mover.mover(row_counter, window, prev_dir_list))
 
         window.extend_layout(window['-ROW_PANEL-'], [create_row(row_counter, row_number_view)])
         event, values = window.read(timeout=0.0001)
@@ -326,6 +334,10 @@ def update_group_mode():
             if val != None:
                 m.auto_all = val
             
+            val = sg.user_settings_get_entry('childs ' + str(i))
+            if val != None:
+                m.get_child_windows = val
+
             update_auto_all(i, val if val else False)            
 
             init(i)
@@ -378,7 +390,7 @@ def read_settings():
 
     find_instances_nb()
     k = None
-    settings = sg.user_settings()
+    settings = sg.user_settings().copy()
     for k, value in settings.items():
         k_split = k.split(" ")
         if len(k_split) > 1:
@@ -392,7 +404,10 @@ def read_settings():
         if type(value) == tuple:
             window[k_].update(coor(value[0], value[1]))
         else:
-            window[k_].update(value)
+            if not k_ in window.AllKeysDict:
+                sg.user_settings_delete_entry(k)
+            else:
+                window[k_].update(value)
 
     update_group_mode()
 
@@ -402,11 +417,11 @@ def read_save_file(file_path):
         file_path = def_file
     if not os.path.isfile(file_path):
         with open(file_path, "w+") as f:
-            f.write('{"-group- 1": "-group_overlapping-", "bounce_input": "5", "ov_perc": "50", "pixel_mult 1": 1}')
+            f.write('{"-group- 1": "-group_overlapping-", "bounce_input": "2", "ov_perc": "50", "pixel_mult 1": 1}')
             
     # if not os.path.isfile(settings_file):
     #     with open(settings_file, "w+") as f:
-    #         f.write('{"-group- 1": "-group_overlapping-", "bounce_input": "5", "ov_perc": "50", "pixel_mult 1": 1}')
+    #         f.write('{"-group- 1": "-group_overlapping-", "bounce_input": "2", "ov_perc": "50", "pixel_mult 1": 1}')
 
     settings = sg.user_settings_load(file_path)
     #a = sg.user_settings_get_entry("-PTL 0")
@@ -568,7 +583,7 @@ while True:
                 elif event[0] == '-DEL2-':
                     window['-ROW2-', event[1], event[2]].update(visible=False)
                     #mover_list[event[1]].win_list_str.pop(event[2])
-                    mover_list[event[2]].win_list[event[1]].win = None
+                    #mover_list[event[2]].win_list[event[1]].win = None
                     mover_list[event[2]].win_list[event[1]].marked_for_del = True
                     sg.user_settings_delete_entry(f"-DESC- {event[1]} {event[2]}")
                     
@@ -593,6 +608,11 @@ while True:
                     update_auto_all(event[1], val)
                     sg.user_settings_set_entry( " ".join(str(e) for e in event), val)
 
+                elif event[0] == 'childs':
+                    val = window[event].get()
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), val)
+                    mover_list[curr_row].get_child_windows = val
+
                 elif event[0] == "Diagonal":
                     m = mover_list[curr_row]
                     val = values[event]
@@ -610,9 +630,11 @@ while True:
                         for win in win_list:
                             if m.group_windows == GROUP_OVERLAPPING:
                                 if len(win.overlapping_wins) and win == win.overlapping_wins[0]:
-                                    win.direction = m.get_random_direction()
+                                    win.direction = m.get_direction(win.win)
+                                    for ow in win.overlapping_wins:
+                                        ow.direction = win.direction
                             else:
-                                win.direction = m.get_random_direction()
+                                win.direction = m.get_direction(win.win)
 
                 elif event[0] == "slider":
                     mover_list[event[1]].break_sleep = True

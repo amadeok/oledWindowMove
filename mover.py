@@ -1,7 +1,7 @@
 import os, threading, random
 import msvcrt, ctypes, pyautogui 
 import win32pipe, win32file, pywintypes, win32api, win32con, win32gui
-import pygetwindow as gw
+import pygetwindow as gw, time
 from time import sleep
 from mlogging import *
 import PySimpleGUI as sg
@@ -17,6 +17,10 @@ Rectangle = namedtuple('Rectangle', 'xmin ymin xmax ymax')
 
 #www.moveTo(0, 0)
 #win32gui.MoveWindow(67474, 0, 0, 100, 100, True)
+
+
+
+            
 
 def move_win(hwnd, x_change, y_change):
     rect = win32gui.GetWindowRect(hwnd)
@@ -55,18 +59,33 @@ def win_up(w, m, entry_c, cur_row, win, text):
                                                 + win.title if win else "NOT found")
     m.win_list[entry_c].win = win if win else None
     sg.user_settings_set_entry(f"-DESC- {entry_c} {cur_row}", text)
+    if not win:
+        coors = m.win_list[entry_c].last_position
+        if coors:
+            m.prev_direction_list[coors.x][coors.y] = m.win_list[entry_c].direction
+    else:
+        m.win_list[entry_c].direction = m.get_direction(win)
     
 
-ret = ge.get_visible_windows() # the first elements are the ones more on top
-for elem in ret:
-    print((elem["title"] +  "\n"))
+    
+
+def find_hwnd_(new_win_h , l: list):
+    for i, w in enumerate(l):
+        if w.win:
+            if w.win._hWnd == new_win_h:
+                return i
+    return -1
+
+# ret = ge.get_visible_windows() # the first elements are the ones more on top
+# for elem in ret:
+#     print((elem["title"] +  "\n"))
 
 
 
 class mover():
     NON_DIAGONAL = 0
     DIAGONAL = 1
-    def __init__(self, id, ui) -> None:
+    def __init__(self, id, ui, prev_directions_list) -> None:
         self.whitelist  = []
        # self.mode = GROUP_TOGHETER
         self.win_list = []#[gw.Window(elem["hwnd"]) for elem in ret]
@@ -83,6 +102,7 @@ class mover():
         print(self.direction)
 
         self.new_direction_debounce = 0
+        self.get_child_windows = False
 
         self.x_move = 1
         self.y_move = 0
@@ -105,15 +125,53 @@ class mover():
         self.id = id
         self.ui_ref = ui
         self.overlap_perc = 90
-        self.bounce_pixel = 5
+        self.bounce_pixel = 2
         self.auto_all = False
 
-    def get_random_direction(self):
+        self.prev_direction_list = prev_directions_list
+
+
+    def set_child_windows(self, win_list):
+
+        all = gw.getAllWindows()
+
+        for nw in all:
+            if nw.title != "" and nw.area > 0:
+                parent = win32gui.GetParent(nw._hWnd)
+                if parent:
+                    for ww in win_list:
+                        if ww.win == None:  continue
+                        if ww.win._hWnd == parent:
+                            #if not:
+                            if find_hwnd_(nw._hWnd, ww.child_windows) == -1:
+                                ww.child_windows.append(win_(nw, None, None, self.get_direction(nw) ))
+
+        
+        for w in win_list:
+            for cw in w.child_windows:
+                if cw.win:
+                    if find_hwnd_(cw.win._hWnd, win_list) == -1:
+                        win_list.append(cw)
+
+    def get_direction(self, w: gw.Window):
+        if w:
+            
+            got = self.prev_direction_list[w.topleft.x][w.topleft.y] if w.topleft.x < len(self.prev_direction_list) and w.topleft.y < len(self.prev_direction_list[0]) else None
+            if  got:
+                return got
+            else:
+                return self.get_random_direction()
+        else:
+            return self.get_random_direction()
+
+    def get_random_direction(self):#, w: win_):
         dir = None
         if self.direction_mode == self.DIAGONAL:
             dir = self.direction = directions_list[ random.randint(4,7)]
         else:
             dir = self.direction = directions_list[random.randint(0, 3)] #Directions.LEFT
+
+     #   self.prev_direction_list[w.win.topleft.x][w.win.topleft.y] = dir
         return dir
 
     def get_active_area_area(self):
@@ -133,7 +191,7 @@ class mover():
                 if o_a and o_a > winn.area//2:
                     w = win_(winn,  ("-ROW2-", len(self.win_list), self.id), False, 
                                          self.direction if self.group_windows == GROUP_ALL else
-                                           self.get_random_direction())
+                                           self.get_direction(winn))
                     self.win_list.append(w)
                     #self.raw_win_list_str.append(win["title"])
                 #else:
@@ -311,6 +369,9 @@ class mover():
                     new_direction = Directions.BOTTOM_LEFT
         
         self.new_direction_debounce = 10
+
+        #self.prev_direction_list[w.win.topleft.x][w.win.topleft.y] = dir
+
         print(" new direction: ",  new_direction.name, " | ", title)
         return new_direction
 
@@ -376,7 +437,9 @@ class mover():
                 smaller = w1; bigger = w2
 
             a = get_overlapping_area(w1.win, w2.win)
-            perc = (a / (smaller.win.area ) )*100
+            perc = 0
+            if win32gui.IsWindow(w1.win._hWnd) and win32gui.IsWindow(w2.win._hWnd):
+                perc = (a / (smaller.win.area ) )*100 if smaller.win.area > 0 else 0
 
             if perc > self.overlap_perc:
                 w1.overlapping_wins.append((w2, perc)) #((w2, perc))
@@ -433,7 +496,7 @@ class mover():
 
         for i, w1 in enumerate(win_list):
             w1.overlapping_wins = remove_dup(l[i])
-            w1.overlapping_wins.sort(key=lambda x: x.win.area, reverse=True)
+            w1.overlapping_wins.sort(key=lambda x: x.win.area if win32gui.IsWindow(x.win._hWnd) else 1, reverse=True)
 
 
         for i1, w1 in enumerate(win_list):
@@ -472,7 +535,7 @@ class mover():
 
     @staticmethod
     def win_minimized(h):
-        if h.isMinimized:
+        if h.isMinimized or not win32gui.IsWindow(h._hWnd):
             return True
         if abs(h.centerx) > 30*1000 or abs(h.centery) > 30*1000:
             return True
@@ -487,16 +550,16 @@ class mover():
                     if w.win._hWnd == new_win._hWnd:
                         return i
             return -1
-        l = [ gw.Window(elem["hwnd"]) for elem in ge.get_visible_windows()] #gw.getAllWindows()
+        l = [ gw.Window(elem["hwnd"]) if win32gui.IsWindow(elem["hwnd"]) else None for elem in ge.get_visible_windows()] #gw.getAllWindows()
         for win in l:
-            if win.title != "":
+            if win and win.title != "":
                 o_a = get_overlapping_area(self.active_area, win)
                 if o_a and o_a > win.area//2 and win.width < self.scree_res.width and win.height < self.scree_res.height:
                     found_index = find_hwnd(win, self.all_win_list)
                     if found_index == -1:
                         try:
                             move_win(win._hWnd, 0, 0)
-                            self.all_win_list.append(win_(win, None, None, self.get_random_direction()))
+                            self.all_win_list.append(win_(win, None, None, self.get_direction(win)))
                         except:
                             pass
                     #else:
@@ -512,10 +575,13 @@ class mover():
             per_sec = self.pixels_per_min / 60
             if (self.custom_sleep(1/per_sec)):
                 continue
-            
+            t = time.time()
             win_list = self.get_auto_all_win_list() if self.auto_all else self.win_list
+            if self.get_child_windows:
+                self.set_child_windows(win_list)
 
             if self.group_windows == GROUP_ALL:
+
                 self.generated_group_box = self.get_group_box(win_list)
                 collision = self.is_box_out_of_area(self.generated_group_box)
                 #print(collision)
@@ -537,10 +603,12 @@ class mover():
                 #for win in win_list:
                 #    win.win.moving_overlapped = False
 
-                for i, win_b in enumerate(win_list):
+                for i, win_b in enumerate(win_list): #find border area collisions
                     if win_b.last_collision:
                         continue
                     if win_b.win and not win32gui.IsWindow(win_b.win._hWnd) or win_b.marked_for_del: 
+                        if win_b.last_position:
+                            self.prev_direction_list[win_b.last_position.x][win_b.last_position.y]  = win_b.direction
                         win_b.win = None
                         if not self.auto_all:
                             win_up(self.ui_ref, self,  i, self.id, win_b.win,  "None")
@@ -565,7 +633,7 @@ class mover():
                             w.last_collision = 2
        
 
-                for win1 in win_list:
+                for win1 in win_list: # find collisions against other windows
                     for win2 in win_list:
                         if win1.last_collision or win2.last_collision or not win1.win or not win2.win:
                             continue
@@ -626,6 +694,11 @@ class mover():
                 for win__ in reversed(win_list):
                     if  win__.win and win32gui.IsWindow(win__.win._hWnd) and win__.win.width != 0:
                         move_win(win__.win._hWnd, win__.direction.x * self.pix_mult, win__.direction.y* self.pix_mult)  # win[0].move(win[3].x, win[3].y)
+                        try:
+                            if abs(win__.win.topleft.x) < 30*1000 and  abs(win__.win.topleft.y) < 30*1000:
+                                win__.last_position = win__.win.topleft
+                        except Exception as e:
+                            print(e)
 
 
             elif self.group_windows == GROUP_NONE:
@@ -653,3 +726,4 @@ class mover():
                 self.stop = False
                 self.loop_running = False
                 break
+            print(time.time() - t)
