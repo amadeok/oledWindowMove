@@ -333,12 +333,13 @@ def update_group_mode():
             val = sg.user_settings_get_entry('auto_all ' + str(i))
             if val != None:
                 m.auto_all = val
-            
+                
+            update_auto_all(i, val if val else False)            
+
             val = sg.user_settings_get_entry('childs ' + str(i))
             if val != None:
                 m.get_child_windows = val
 
-            update_auto_all(i, val if val else False)            
 
             init(i)
 

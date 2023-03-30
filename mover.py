@@ -155,8 +155,9 @@ class mover():
 
     def get_direction(self, w: gw.Window):
         if w:
-            
-            got = self.prev_direction_list[w.topleft.x][w.topleft.y] if w.topleft.x < len(self.prev_direction_list) and w.topleft.y < len(self.prev_direction_list[0]) else None
+            got = None
+            if abs(w.topleft.x) < 30*1000 and abs(w.topleft.y) < 30*1000: 
+                got = self.prev_direction_list[w.topleft.x][w.topleft.y] if w.topleft.x < len(self.prev_direction_list) and w.topleft.y < len(self.prev_direction_list[0]) else None
             if  got:
                 return got
             else:
@@ -533,6 +534,12 @@ class mover():
 
         main_list = list(main_list for main_list,_ in itertools.groupby(main_list))
 
+    def is_win_out_of_screen(self, win):
+        if win.topright.x < 0 or win.bottomleft.y < 0 or  win.topleft.x > self.scree_res.width or win.topright.y > self.scree_res.height:
+            return True
+        return False
+            
+
     @staticmethod
     def win_minimized(h):
         if h.isMinimized or not win32gui.IsWindow(h._hWnd):
@@ -608,7 +615,8 @@ class mover():
                         continue
                     if win_b.win and not win32gui.IsWindow(win_b.win._hWnd) or win_b.marked_for_del: 
                         if win_b.last_position:
-                            self.prev_direction_list[win_b.last_position.x][win_b.last_position.y]  = win_b.direction
+                            if win_b.last_position.x < len(self.prev_direction_list) and win_b.last_position.y < len(self.prev_direction_list[0]):
+                                self.prev_direction_list[win_b.last_position.x][win_b.last_position.y]  = win_b.direction
                         win_b.win = None
                         if not self.auto_all:
                             win_up(self.ui_ref, self,  i, self.id, win_b.win,  "None")
@@ -654,8 +662,10 @@ class mover():
                             win2.last_collision = 2
                             
                             win1.direction = self.determine_direction(col[0], win1.direction, win1.win.title)
+                            v = pygame.math.Vector2(0, 0)
+                            if win32gui.IsWindow(win1.win._hWnd) and win32gui.IsWindow(win2.win._hWnd):
+                                v = pygame.math.Vector2(win1.win.center.x - win2.win.center.x, win1.win.center.y - win2.win.center.y)
                             
-                            v = pygame.math.Vector2(win1.win.center.x - win2.win.center.x, win1.win.center.y - win2.win.center.y)
                             
                             vm = v.normalize() if v.x != 0 and v.y != 0 else v
                             bump_x = int(round(vm.x))*self.bounce_pixel
@@ -690,13 +700,30 @@ class mover():
                     if win_.last_collision:
                         win_.last_collision-=1
 
-                
+                def move_win_to_last_pos(win__):
+                    if win__.last_position != None:
+                        print("Moving it to last good known position")
+                        win32gui.MoveWindow(win__.win._hWnd, win__.last_position.x, win__.last_position.y, 
+                                            win__.win.width, win__.win.height, True)
+
+
                 for win__ in reversed(win_list):
                     if  win__.win and win32gui.IsWindow(win__.win._hWnd) and win__.win.width != 0:
+                       # print(self.is_win_out_of_screen(win__.win))
                         move_win(win__.win._hWnd, win__.direction.x * self.pix_mult, win__.direction.y* self.pix_mult)  # win[0].move(win[3].x, win[3].y)
                         try:
+                            dx =  win__.win.topleft.x - win__.last_position.x if win__.last_position else 0
+                            dy = win__.win.topleft.y - win__.last_position.y if win__.last_position else 0
+
                             if abs(win__.win.topleft.x) < 30*1000 and  abs(win__.win.topleft.y) < 30*1000:
-                                win__.last_position = win__.win.topleft
+                                if self.is_win_out_of_screen(win__.win):
+                                    if not win__.win.isMinimized and abs(dx) > 50 and abs(dy) > 50:
+                                        move_win_to_last_pos(win__)
+                                    else:
+                                        win__.last_position = win__.win.topleft
+                            elif not win__.win.isMinimized:
+                                print(f"window {win__.win.title} is being moved incorrectly ?")
+                                move_win_to_last_pos(win__)
                         except Exception as e:
                             print(e)
 
