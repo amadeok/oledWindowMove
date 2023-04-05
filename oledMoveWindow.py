@@ -560,8 +560,11 @@ while True:
                 elif "start_stop" in event[0]:
                     if mover_list[event[1]].loop_running:
                         mover_list[event[1]].stop = True
+                        window[event].update(button_color = 'yellow on green')
                     else:
                         mover_list[event[1]].start_loop()
+                        window[event].update(button_color = 'yellow on red')
+
                     sleep(0.1)
 
                 elif event[0 ] == "which":

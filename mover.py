@@ -23,6 +23,8 @@ Rectangle = namedtuple('Rectangle', 'xmin ymin xmax ymax')
             
 
 def move_win(hwnd, x_change, y_change):
+    if not win32gui.IsWindow(hwnd):
+        return
     rect = win32gui.GetWindowRect(hwnd)
     x = rect[0] # 
     y = rect[1] # 
