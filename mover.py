@@ -57,8 +57,11 @@ def get_overlapping_area(win1, win2):
     return area(ra, rb)
 
 def win_up(w, m, entry_c, cur_row, win, text):
-    w[('-STATUS-',entry_c, cur_row)].update(f'Row2 {entry_c}, {cur_row} , window found: ' 
-                                                + win.title if win else "NOT found")
+    try:
+        w[('-STATUS-',entry_c, cur_row)].update(f'Row2 {entry_c}, {cur_row} , window found: ' 
+                                                    + win.title if win else "NOT found")
+    except Exception as e:
+        print(e)
     m.win_list[entry_c].win = win if win else None
     sg.user_settings_set_entry(f"-DESC- {entry_c} {cur_row}", text)
     if not win:
@@ -447,7 +450,7 @@ class mover():
             if perc > self.overlap_perc:
                 w1.overlapping_wins.append((w2, perc)) #((w2, perc))
 
-        w1.overlapping_wins.sort(key=lambda x: x[0].win.area, reverse=True)
+        w1.overlapping_wins.sort(key=lambda x: x[0].win.area if win32gui.IsWindow(x[0].win._hWnd) else 0, reverse=True)
         
        # for ww in w1.overlapping_wins:
        #     print("--- ",  ww[0].win.area, " ", ww[1], " ", ww, )
@@ -679,7 +682,8 @@ class mover():
                                 for w in win1.overlapping_wins:
                                     if w != win1:
                                         w.direction = win1.direction
-                                        move_win(w.win._hWnd, bump_x, bump_y)
+                                        if w.win:
+                                            move_win(w.win._hWnd, bump_x, bump_y)
                                         w.last_collision = 2
 
 
@@ -693,9 +697,10 @@ class mover():
 
                             for w2 in win2.overlapping_wins:
                                 if w2 != win2 and w2 != win1:
-                                    w2.direction = win2.direction
-                                    move_win(w2.win._hWnd, -bump_x, -bump_y)
-                                    w2.last_collision = 2
+                                    if w2.win:
+                                        w2.direction = win2.direction
+                                        move_win(w2.win._hWnd, -bump_x, -bump_y)
+                                        w2.last_collision = 2
                         
                 for win_ in win_list:
                     #win.last_collision = False
