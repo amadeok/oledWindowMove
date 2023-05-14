@@ -108,7 +108,7 @@ class mover():
 
         self.new_direction_debounce = 0
         self.get_child_windows = False
-
+        self.auto_start  = True
         self.x_move = 1
         self.y_move = 0
         self.pix_mult = 1

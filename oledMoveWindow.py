@@ -138,6 +138,7 @@ def create_row(row_counter, row_number_view):
 
                 sg.Checkbox('Auto All', enable_events=True, key=("auto_all", row_counter), default=False),
                 sg.Checkbox('Childs', enable_events=True, key=("childs", row_counter), default=False),
+                sg.Checkbox('Auto start', enable_events=True, key=("auto_start", row_counter), default=True),
 
                # sg.Checkbox('Group', enable_events=True, key=("Group", row_counter), default=True),
 
@@ -333,6 +334,10 @@ def update_group_mode():
             val = sg.user_settings_get_entry('auto_all ' + str(i))
             if val != None:
                 m.auto_all = val
+
+            val = sg.user_settings_get_entry('auto_start ' + str(i))
+            if val != None:
+                m.auto_start = val
                 
             update_auto_all(i, val if val else False)            
 
@@ -440,6 +445,13 @@ def read_save_file(file_path):
             if ov_perc.isdigit():
                 m.overlap_perc = int(ov_perc)
     
+def start_loop(event):
+    if mover_list[event[1]].loop_running:
+        mover_list[event[1]].stop = True
+        window[event].update(button_color = 'yellow on green')
+    else:
+        mover_list[event[1]].start_loop()
+        window[event].update(button_color = 'yellow on red')
 
 def get_layout():
     return   [  [sg.Text('Add and "Delete" Rows From a Window', font='15')],
@@ -490,6 +502,10 @@ while True:
         win32gui.MoveWindow(h._hWnd, prev_pos[0], prev_pos[1], h.width, h.height, True)
         #win32gui.LineTo(h._hWnd, 0, 1000)
     read_save_file(settings_file)
+    sleep(0.5)
+    for c, m in enumerate(mover_list):
+        if m and m.auto_start:
+            start_loop(("start_stop", c))
 
     while True:
 
@@ -558,12 +574,7 @@ while True:
                     sg.user_settings_set_entry( " ".join(str(e) for e in event), (var.x, var.y))
 
                 elif "start_stop" in event[0]:
-                    if mover_list[event[1]].loop_running:
-                        mover_list[event[1]].stop = True
-                        window[event].update(button_color = 'yellow on green')
-                    else:
-                        mover_list[event[1]].start_loop()
-                        window[event].update(button_color = 'yellow on red')
+                    start_loop(event)
 
                     sleep(0.1)
 
@@ -610,6 +621,9 @@ while True:
                 elif event[0] == 'auto_all':
                     val = window[event].get()
                     update_auto_all(event[1], val)
+                    sg.user_settings_set_entry( " ".join(str(e) for e in event), val)
+                elif event[0] == 'auto_start':
+                    val = window[event].get()
                     sg.user_settings_set_entry( " ".join(str(e) for e in event), val)
 
                 elif event[0] == 'childs':
