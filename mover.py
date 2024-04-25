@@ -33,7 +33,10 @@ def move_win(hwnd, x_change, y_change):
     if x+x_change > abs(30*1000) or y+y_change > abs(30*1000):
         print("trying to move window too far")
     else:
-        win32gui.MoveWindow(hwnd, x+x_change, y+y_change, w, h, True)
+        try:
+            win32gui.MoveWindow(hwnd, x+x_change, y+y_change, w, h, True)
+        except Exception as e:
+            print("exception trying to move window: " + str(e))
 
 
 def area(a, b):  # returns None if rectangles don't intersect

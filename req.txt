@@ -1,0 +1,1 @@
+pip install pygame PyGetWindow pyautogui PySimpleGUI pywin32 psutil numpy
